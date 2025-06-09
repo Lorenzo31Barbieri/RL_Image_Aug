@@ -1,109 +1,100 @@
+# classifier.py
+
 import torch
+import torch.nn as nn
 import torchvision.models as models
-import torch.nn.functional as F
 import torchvision.transforms as T
-from PIL import Image # Per la gestione delle immagini PIL
+from PIL import Image
 
 class ImageClassifier:
-    def __init__(self, model_name='resnet18', num_classes=1000, pretrained=True):
-        """
-        Inizializza il classificatore di immagini.
-
-        Args:
-            model_name (str): Nome del modello pre-addestrato da caricare (es. 'resnet18', 'resnet50').
-            num_classes (int): Numero di classi del dataset su cui è stato addestrato il classificatore (default 1000 per ImageNet).
-            pretrained (bool): Se caricare pesi pre-addestrati.
-        """
+    def __init__(self, model_name='resnet18', pretrained=True, num_classes_binary=2):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = self._load_model(model_name, pretrained, num_classes)
-        self.model.to(self.device)
-        self.model.eval() # Imposta il modello in modalità valutazione
-        self.preprocess = self._define_preprocess_transforms()
 
-    def _load_model(self, model_name, pretrained, num_classes):
-        """Carica il modello pre-addestrato."""
         if model_name == 'resnet18':
-            model = models.resnet18(pretrained=pretrained)
-        elif model_name == 'resnet50':
-            model = models.resnet50(pretrained=pretrained)
-        # Aggiungi altri modelli se necessario
+            self.model = models.resnet18(pretrained=pretrained)
+            num_ftrs = self.model.fc.in_features
+            # Non modificare il layer fc qui se vuoi usare le predizioni ImageNet originali
+            # per la mappatura.
+            # Se addestrassi il classificatore su un dataset binario, qui metteresti:
+            # self.model.fc = nn.Linear(num_ftrs, num_classes_binary)
         else:
-            raise ValueError(f"Modello '{model_name}' non supportato.")
+            raise ValueError("Modello non supportato.")
 
-        # Se stai usando un modello pre-addestrato su ImageNet (1000 classi)
-        # e vuoi riutilizzarlo per un problema a 2 classi, dovrai modificare l'ultimo layer.
-        # Per ora, manteniamo l'originale se l'obiettivo è solo testare la classificazione
-        # e poi mappare le label. Tuttavia, per un progetto reale, ti suggerisco
-        # di fare il fine-tuning del classificatore sul tuo dataset.
-        if num_classes != 1000 and pretrained:
-            # Esempio per ResNet: sostituisci l'ultimo layer completamente connesso
-            num_ftrs = model.fc.in_features
-            model.fc = torch.nn.Linear(num_ftrs, num_classes)
-            print(f"Sostituito il layer finale di {model_name} per {num_classes} classi.")
+        self.model = self.model.to(self.device)
+        self.model.eval() # Imposta il modello in modalità valutazione
 
-        return model
-
-    def _define_preprocess_transforms(self):
-        """Definisce le trasformazioni di preprocessing standard."""
-        return T.Compose([
+        # Definizione delle trasformazioni per il pre-processing dell'immagine
+        # Queste dovrebbero essere standard per ResNet18 addestrato su ImageNet
+        self.preprocess = T.Compose([
             T.Resize(256),
             T.CenterCrop(224),
             T.ToTensor(),
-            T.Normalize(mean=[0.485, 0.456, 0.406],
-                        std=[0.229, 0.224, 0.225])
+            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
+
+        # --- NUOVA LOGICA DI MAPPATURA ---
+        # Definisci i range delle classi ImageNet per gatti e cani
+        self.imagenet_cat_indices = list(range(281, 286)) # Indici 281-285 per i gatti
+        self.imagenet_dog_indices = list(range(151, 269)) # Indici 151-268 per i cani
 
     def preprocess_image(self, image):
         """
-        Applica le trasformazioni di preprocessing a un'immagine.
-
-        Args:
-            image (PIL.Image o torch.Tensor): L'immagine da pre-processare.
-
-        Returns:
-            torch.Tensor: L'immagine pre-processata e pronta per il modello.
+        Pre-processa una PIL Image o un tensore per l'input del modello.
         """
-        if isinstance(image, torch.Tensor) and image.ndim == 4:
-            # Se è già un batch (B, C, H, W) e normalizzato, non fare nulla
-            # Altrimenti, se è (C, H, W) o (H, W, C), le trasformazioni lo gestiranno
+        if isinstance(image, Image.Image):
+            return self.preprocess(image)
+        elif isinstance(image, torch.Tensor):
+            # Se è già un tensore, assumiamo che sia già pre-processato
+            # ma assicuriamoci che abbia la forma corretta (C, H, W)
+            if image.ndim == 4:
+                image = image.squeeze(0)
+            # Potresti voler applicare la normalizzazione se non è già stata fatta
+            # O semplicemente restituire l'immagine così com'è se l'ambiente lo gestisce
             return image
-        elif isinstance(image, torch.Tensor) and image.ndim == 3:
-            # Se è (C, H, W), applica le trasformazioni (ToTensor lo gestisce)
-            return self.preprocess(T.ToPILImage()(image)) # Converti in PIL per le trasformazioni
-        elif isinstance(image, Image.Image):
-            return self.preprocess(image).unsqueeze(0) # Aggiungi la dimensione del batch
         else:
-            raise TypeError("L'input 'image' deve essere una PIL Image o un torch.Tensor.")
+            raise TypeError("Input must be a PIL Image or a torch.Tensor")
 
-    def classify_image(self, image):
+    def classify_image(self, input_tensor):
         """
-        Classifica una singola immagine.
-
-        Args:
-            image (PIL.Image o torch.Tensor): L'immagine da classificare.
-
-        Returns:
-            tuple: (pred_label, confidence), dove pred_label è 0 o 1, e confidence è la probabilità.
+        Classifica un tensore immagine (C, H, W o 1, C, H, W).
+        Restituisce la label binaria predetta (0 per gatto, 1 per cane) e la confidenza.
         """
-        # Applica il preprocessing se l'immagine non è già un tensore pronto per il modello
-        if isinstance(image, Image.Image) or (isinstance(image, torch.Tensor) and image.ndim != 4):
-            input_tensor = self.preprocess_image(image)
-        else:
-            input_tensor = image.to(self.device) # Assume che sia già preprocessata e in formato batch
+        # Assicurati che l'input abbia la dimensione del batch
+        if input_tensor.ndim == 3:
+            input_tensor = input_tensor.unsqueeze(0) # Aggiunge dimensione batch (1, C, H, W)
+
+        input_tensor = input_tensor.to(self.device)
 
         with torch.no_grad():
-            logits = self.model(input_tensor)
-            probs = F.softmax(logits, dim=1)
-            original_pred_label_idx = torch.argmax(probs, dim=1).item()
-            confidence = probs[0, original_pred_label_idx].item()
+            logits = self.model(input_tensor) # Output: (1, 1000)
+            probabilities = torch.softmax(logits, dim=1)
 
-            # Mappatura delle etichette (questo è specifico del tuo problema)
-            # Hai detto che vuoi classificare in 0 o 1.
-            # Se le classi ImageNet da 151 a 268 corrispondono alla classe "1"
-            # e le altre alla classe "0".
-            # if 151 <= original_pred_label_idx <= 268:
-            #     final_pred_label = 1
-            # else:
-            #     final_pred_label = 0
+            # Ottieni la predizione ImageNet con la massima probabilità
+            max_prob, predicted_imagenet_idx = torch.max(probabilities, 1)
+            predicted_imagenet_idx = predicted_imagenet_idx.item() # Estrai il valore scalare
 
-            return original_pred_label_idx, confidence
+            # --- NUOVA LOGICA DI MAPPATURA ---
+            binary_label = -1 # Valore di default per indicare "non cane/gatto specifico"
+            conf = 0.0 # Confidenza relativa alla classe mappata
+
+            if predicted_imagenet_idx in self.imagenet_cat_indices:
+                binary_label = 0 # Mappa a 'gatto'
+                # Per la confidenza, puoi usare la probabilità della classe specifica del gatto
+                # o la somma delle probabilità delle classi di gatto se vuoi una confidenza aggregata.
+                # Per semplicità, usiamo la confidenza della classe singola più probabile.
+                conf = max_prob.item()
+            elif predicted_imagenet_idx in self.imagenet_dog_indices:
+                binary_label = 1 # Mappa a 'cane'
+                conf = max_prob.item()
+            else:
+                # Se il modello predice qualcos'altro (es. "tazza", "bicicletta"),
+                # consideralo come "non una delle nostre classi target" per la ricompensa.
+                # Puoi decidere come gestire questa confidenza:
+                # Potresti volerla impostare a 0 o usare la confidenza della classe non-cat/dog
+                # per penalizzare ulteriormente l'agente.
+                binary_label = -1 # O qualsiasi valore indichi "non classificato come cat/dog"
+                conf = 0.0 # Bassa confidenza se non è una delle classi che ci interessano.
+                # Puoi anche decidere di ritornare la max_prob, ma la tua logica di ricompensa
+                # dovrebbe penalizzare questa predizione se true_label è 0 o 1.
+
+        return binary_label, conf
