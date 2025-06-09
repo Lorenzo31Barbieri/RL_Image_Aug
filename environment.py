@@ -116,20 +116,22 @@ class ImageAugmentationEnv:
         Estrae le feature dall'immagine utilizzando l'encoder.
         image_tensor: un tensore (C, H, W) già pre-processato e normalizzato.
         """
-        # L'encoder si aspetta un input batch (B, C, H, W)
-        image_batch = image_tensor.unsqueeze(0).to(self.device)
+        image_batch = image_tensor.unsqueeze(0).to(self.device) # (1, C, H, W)
         with torch.no_grad():
-            features = self.encoder(image_batch)
-            # Rimuovi la dimensione del batch se l'output è (1, Feature_Dim)
-            return features.squeeze(0) # Restituisce un tensore (Feature_Dim,)
+            features = self.encoder(image_batch) # Output tipico di ResNet: (1, 512, 1, 1)
+
+            # Appiattisce il tensore per rimuovere tutte le dimensioni di 1 e renderlo 1D
+            # Ad esempio, da (1, 512, 1, 1) a (512,) dopo unsqueeze(0)
+            return features.squeeze(0).flatten() # <--- USA .flatten() QUI
+            # O equivalentemente: return features.view(features.size(0), -1).squeeze(0)
+            # O anche più semplicemente se sai che è (1, N, 1, 1) -> return features.view(-1)
 
     def get_state_shape(self):
-        # Esegue un rapido passaggio attraverso l'encoder per ottenere la forma delle feature
-        # Richiede un'immagine dummy o di usare self.original_image
-        dummy_image = torch.randn_like(self.original_image).unsqueeze(0).to(self.device)
+        dummy_image = self.original_image.unsqueeze(0).to(self.device)
         with torch.no_grad():
             features = self.encoder(dummy_image)
-        return features.squeeze(0).shape
+            # Deve restituire la forma del tensore 1D
+        return features.squeeze(0).flatten().shape # <--- Assicurati che anche qui sia 1D
 
     def get_num_actions(self):
         return get_num_actions()
