@@ -1,100 +1,146 @@
 # classifier.py
-
 import torch
 import torch.nn as nn
-import torchvision.models as models
+import torch.optim as optim
 import torchvision.transforms as T
+from torch.amp import autocast, GradScaler
 from PIL import Image
 
+# Importa la tua classe CNN personalizzata
+from my_cnn_model import MyCNN 
+
 class ImageClassifier:
-    def __init__(self, model_name='resnet18', pretrained=True, num_classes_binary=2):
+    def __init__(self, num_classes=2, lr=1e-3, model_path=None):
+        """
+        Inizializza il classificatore.
+        Args:
+            num_classes (int): Numero di classi per il classificatore (2 per cani/gatti).
+            lr (float): Learning rate per l'ottimizzatore del classificatore.
+            model_path (str, optional): Percorso da cui caricare i pesi pre-esistenti del modello.
+                                        Se None, il modello viene inizializzato casualmente.
+        """
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        self.model = MyCNN(num_classes=num_classes).to(self.device)
+        
+        # Carica i pesi se è stato fornito un percorso
+        if model_path:
+            try:
+                self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+                print(f"Modello classificatore caricato da: {model_path}")
+            except FileNotFoundError:
+                print(f"Attenzione: file modello non trovato a {model_path}. Inizializzazione casuale.")
+            except Exception as e:
+                print(f"Errore nel caricamento del modello da {model_path}: {e}. Inizializzazione casuale.")
+        
+        self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
+        self.criterion = nn.CrossEntropyLoss() # Usiamo CrossEntropyLoss per classificazione multliclasse (qui binaria)
 
-        if model_name == 'resnet18':
-            self.model = models.resnet18(pretrained=pretrained)
-            num_ftrs = self.model.fc.in_features
-            # Non modificare il layer fc qui se vuoi usare le predizioni ImageNet originali
-            # per la mappatura.
-            # Se addestrassi il classificatore su un dataset binario, qui metteresti:
-            # self.model.fc = nn.Linear(num_ftrs, num_classes_binary)
-        else:
-            raise ValueError("Modello non supportato.")
+        # Inizializza lo scaler per l'AMP
+        self.scaler = GradScaler()
 
-        self.model = self.model.to(self.device)
-        self.model.eval() # Imposta il modello in modalità valutazione
-
-        # Definizione delle trasformazioni per il pre-processing dell'immagine
-        # Queste dovrebbero essere standard per ResNet18 addestrato su ImageNet
+        # Trasformazioni standard per il pre-processing dell'immagine
+        # Queste dovrebbero corrispondere a quelle usate per l'addestramento iniziale della CNN
         self.preprocess = T.Compose([
             T.Resize(256),
             T.CenterCrop(224),
             T.ToTensor(),
             T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
-
-        # --- NUOVA LOGICA DI MAPPATURA ---
-        # Definisci i range delle classi ImageNet per gatti e cani
-        self.imagenet_cat_indices = list(range(281, 286)) # Indici 281-285 per i gatti
-        self.imagenet_dog_indices = list(range(151, 269)) # Indici 151-268 per i cani
-
+        
     def preprocess_image(self, image):
         """
         Pre-processa una PIL Image o un tensore per l'input del modello.
+        Converte in tensore PyTorch (C, H, W) e normalizza.
         """
         if isinstance(image, Image.Image):
             return self.preprocess(image)
         elif isinstance(image, torch.Tensor):
-            # Se è già un tensore, assumiamo che sia già pre-processato
-            # ma assicuriamoci che abbia la forma corretta (C, H, W)
-            if image.ndim == 4:
+            # Se è già un tensore, assumiamo che sia già pre-processato e normalizzato
+            # Assicuriamoci che abbia la forma (C, H, W) se non è già così
+            if image.ndim == 4: # Se ha una dimensione batch
                 image = image.squeeze(0)
-            # Potresti voler applicare la normalizzazione se non è già stata fatta
-            # O semplicemente restituire l'immagine così com'è se l'ambiente lo gestisce
             return image
         else:
             raise TypeError("Input must be a PIL Image or a torch.Tensor")
 
     def classify_image(self, input_tensor):
         """
-        Classifica un tensore immagine (C, H, W o 1, C, H, W).
-        Restituisce la label binaria predetta (0 per gatto, 1 per cane) e la confidenza.
+        Classifica un tensore immagine.
+        Args:
+            input_tensor (torch.Tensor): Tensore immagine (C, H, W) o (1, C, H, W).
+        Returns:
+            tuple: (predicted_label, confidence)
+                predicted_label (int): La label binaria predetta (0 per gatto, 1 per cane).
+                confidence (float): La confidenza della predizione (probabilità).
         """
-        # Assicurati che l'input abbia la dimensione del batch
+        # Aggiungi una dimensione batch se non presente
         if input_tensor.ndim == 3:
-            input_tensor = input_tensor.unsqueeze(0) # Aggiunge dimensione batch (1, C, H, W)
+            input_tensor = input_tensor.unsqueeze(0) # Forma diventa (1, C, H, W)
 
         input_tensor = input_tensor.to(self.device)
 
+        self.model.eval() # Imposta il modello in modalità valutazione per la classificazione
         with torch.no_grad():
-            logits = self.model(input_tensor) # Output: (1, 1000)
+            # Il modello restituisce i logits
+            logits = self.model(input_tensor) # Output: (1, num_classes)
+            
+            # Applica softmax per ottenere le probabilità
             probabilities = torch.softmax(logits, dim=1)
+            
+            # Trova la classe con la massima probabilità
+            max_prob, predicted_label = torch.max(probabilities, 1)
+            
+            # Estrai i valori scalari
+            predicted_label = predicted_label.item()
+            confidence = max_prob.item()
 
-            # Ottieni la predizione ImageNet con la massima probabilità
-            max_prob, predicted_imagenet_idx = torch.max(probabilities, 1)
-            predicted_imagenet_idx = predicted_imagenet_idx.item() # Estrai il valore scalare
+        return predicted_label, confidence
 
-            # --- NUOVA LOGICA DI MAPPATURA ---
-            binary_label = -1 # Valore di default per indicare "non cane/gatto specifico"
-            conf = 0.0 # Confidenza relativa alla classe mappata
+    def train_step(self, images, labels):
+        """
+        Esegue un singolo passo di training per il classificatore.
+        Args:
+            images (torch.Tensor): Tensore batch di immagini (N, C, H, W).
+            labels (torch.Tensor): Tensore batch di etichette (N).
+        Returns:
+            float: La perdita di training per il batch.
+        """
+        self.model.train() # Imposta il modello in modalità training
+        
+        images = images.to(self.device)
+        labels = labels.to(self.device)
 
-            if predicted_imagenet_idx in self.imagenet_cat_indices:
-                binary_label = 0 # Mappa a 'gatto'
-                # Per la confidenza, puoi usare la probabilità della classe specifica del gatto
-                # o la somma delle probabilità delle classi di gatto se vuoi una confidenza aggregata.
-                # Per semplicità, usiamo la confidenza della classe singola più probabile.
-                conf = max_prob.item()
-            elif predicted_imagenet_idx in self.imagenet_dog_indices:
-                binary_label = 1 # Mappa a 'cane'
-                conf = max_prob.item()
-            else:
-                # Se il modello predice qualcos'altro (es. "tazza", "bicicletta"),
-                # consideralo come "non una delle nostre classi target" per la ricompensa.
-                # Puoi decidere come gestire questa confidenza:
-                # Potresti volerla impostare a 0 o usare la confidenza della classe non-cat/dog
-                # per penalizzare ulteriormente l'agente.
-                binary_label = -1 # O qualsiasi valore indichi "non classificato come cat/dog"
-                conf = 0.0 # Bassa confidenza se non è una delle classi che ci interessano.
-                # Puoi anche decidere di ritornare la max_prob, ma la tua logica di ricompensa
-                # dovrebbe penalizzare questa predizione se true_label è 0 o 1.
+        # Zero i gradienti dell'ottimizzatore
+        self.optimizer.zero_grad()
+        
+        # Abilita autocast per le operazioni in mixed precision
+        with autocast(device_type=self.device.type):
+            # Forward pass
+            outputs = self.model(images)
+        
+            # Calcola la perdita
+            loss = self.criterion(outputs, labels)
 
-        return binary_label, conf
+        # Usa lo scaler per la backward pass e l'ottimizzazione
+        self.scaler.scale(loss).backward() 
+        self.scaler.step(self.optimizer)  
+        self.scaler.update()
+        
+        return loss.item()
+
+    def get_encoder(self):
+        """
+        Restituisce la parte del modello che funge da encoder per l'estrazione delle feature.
+        """
+        # Per la tua MyCNN, l'encoder sarà la parte 'features' seguita dal 'avgpool'.
+        # L'obiettivo è ottenere un output 1D (batch_size, state_dim)
+        encoder = nn.Sequential(self.model.features, self.model.avgpool)
+        encoder.eval() # L'encoder deve rimanere in modalità valutazione durante l'interazione RL
+        encoder.to(self.device)
+        return encoder
+
+    def save_model(self, path):
+        """Salva i pesi del modello classificatore."""
+        torch.save(self.model.state_dict(), path)
+        print(f"Modello classificatore salvato a: {path}")

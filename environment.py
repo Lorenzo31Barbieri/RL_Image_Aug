@@ -1,48 +1,54 @@
 import torch
+from my_cnn_model import MyCNN
 from transforms import get_action_transform, get_num_actions
 
-
 class ImageAugmentationEnv:
-    def __init__(self, original_image, true_label, classifier, encoder, max_steps=5):
+    def __init__(self, classifier, max_steps=5): 
         """
         Inizializza l'ambiente di Image Augmentation.
 
         Args:
-            original_image (torch.Tensor): L'immagine originale da aumentare.
-                                           Si assume sia già pre-processata (C, H, W) e normalizzata.
-            true_label (int): L'etichetta vera (0 o 1) dell'original_image.
-            classifier: L'istanza del tuo classificatore (es. ImageClassifier).
-            encoder: Il modello PyTorch usato come feature extractor (encoder),
-                     che prende un tensore (1, C, H, W) e restituisce un embedding.
+            classifier (MyCNN): L'istanza del classificatore, già pre-addestrato.
             max_steps (int): Numero massimo di azioni che l'agente può eseguire in un episodio.
         """
-        self.original_image = original_image
-        self.true_label = true_label
         self.classifier = classifier
-        self.encoder = encoder
+        self.classifier.eval() 
+        for param in self.classifier.parameters():
+            param.requires_grad = False 
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Inizializza lo stato interno dell'ambiente
+        self.original_image = None # Sarà impostato in reset()
+        self.true_label = None     # Sarà impostato in reset()
         self.current_image = None
         self.steps_taken = 0
         self.max_steps = max_steps
-
-        # Assicurati che encoder e classifier siano sul device corretto
-        self.encoder.to(self.device).eval() # L'encoder deve essere in modalità valutazione
-        if hasattr(self.classifier, 'model'): # Se usi la classe ImageClassifier
-            self.classifier.model.to(self.device).eval()
-        else: # Se passi solo un modello grezzo
-            self.classifier.to(self.device).eval()
+        
+        # Per la ricompensa: memorizza la predizione iniziale dell'immagine non aumentata
+        self.initial_prediction_info = {'pred': -1, 'conf': 0.0} # Verrà aggiornato in reset()
 
 
-    def reset(self):
+    def reset(self, original_image_tensor, true_label): 
         """
-        Reimposta l'ambiente per un nuovo episodio.
+        Reimposta l'ambiente per un nuovo episodio con una nuova immagine.
         Restituisce lo stato iniziale (features dell'immagine originale).
+        
+        Args:
+            original_image_tensor (torch.Tensor): L'immagine originale per il nuovo episodio (C, H, W).
+            true_label (int): L'etichetta vera dell'immagine.
         """
-        self.current_image = self.original_image.clone().to(self.device) # Metti l'immagine sul device
+        self.original_image = original_image_tensor.to(self.device) # Sposta l'originale sul device
+        self.true_label = true_label
+        self.current_image = self.original_image.clone() # Clona per non modificare l'originale
         self.steps_taken = 0
-        initial_state_features = self.get_features(self.current_image)
+        
+        # Calcola la predizione e confidenza iniziale per l'immagine originale
+        initial_pred, initial_conf = self.classifier.classify(self.original_image.unsqueeze(0))
+        self.initial_prediction_info = {'pred': initial_pred, 'conf': initial_conf}
+
+        # Ottieni lo stato iniziale (features dall'encoder del classificatore)
+        initial_state_features = self.classifier.encoder(self.current_image.unsqueeze(0)).squeeze(0)
         return initial_state_features
 
     def step(self, action_id):
@@ -64,28 +70,18 @@ class ImageAugmentationEnv:
         # Ottieni la funzione di trasformazione per l'azione scelta
         transform_func = get_action_transform(action_id)
 
-        # Applica la trasformazione.
-        # È importante che la trasformazione gestisca il tipo di input di current_image
-        # (Tensor o PIL Image). Assumiamo che get_action_transform ritorni una funzione
-        # che opera su un torch.Tensor (C, H, W). Se opera su PIL, dovrai convertire.
+        # Applica la trasformazione all'immagine corrente
         self.current_image = transform_func(self.current_image)
         
-        # Assicurati che l'immagine sia sul device corretto prima di classificarla
-        image_for_classification = self.current_image.unsqueeze(0) # Aggiungi dimensione batch
+        image_for_classification = self.current_image.unsqueeze(0) 
 
         # Classifica l'immagine aumentata
-        # Se usi la classe ImageClassifier, il suo metodo classify_image è già robusto
-        # e si aspetta una PIL Image o un Tensor (C,H,W) o (B,C,H,W) già pre-processato.
-        # Qui, passiamo un tensore che dovrebbe essere già normalizzato.
-        # Assumiamo che classifier.classify_image gestisca il tensore normalizzato
-        # e lo metta sul device corretto internamente.
-        predicted_label, confidence = self.classifier.classify_image(image_for_classification)
-
+        predicted_label, confidence = self.classifier.classify(image_for_classification)
 
         # Calcola la ricompensa
         reward = 0.0
         done = False
-        info = {'steps_taken': self.steps_taken}
+        info = {'steps_taken': self.steps_taken, 'prediction': predicted_label, 'confidence': confidence}
 
         if predicted_label == self.true_label:
             # Ricompensa positiva basata sulla confidenza per la classificazione corretta
@@ -103,35 +99,25 @@ class ImageAugmentationEnv:
         # Criterio di terminazione: numero massimo di passi raggiunto
         if self.steps_taken >= self.max_steps and not done:
             done = True
-            reward -= 0.5 # Penalità aggiuntiva per non aver raggiunto l'obiettivo in tempo
+            # Penalità aggiuntiva per non aver raggiunto l'obiettivo in tempo
+            reward -= 0.5 
             info['status'] = 'Max steps reached without correct classification'
 
         # Ottieni il nuovo stato (features dell'immagine aumentata)
-        next_state = self.get_features(self.current_image)
+        next_state = self.classifier.encoder(self.current_image.unsqueeze(0)).squeeze(0)
 
         return next_state, reward, done, info
-
-    def get_features(self, image_tensor):
-        """
-        Estrae le feature dall'immagine utilizzando l'encoder.
-        image_tensor: un tensore (C, H, W) già pre-processato e normalizzato.
-        """
-        image_batch = image_tensor.unsqueeze(0).to(self.device) # (1, C, H, W)
-        with torch.no_grad():
-            features = self.encoder(image_batch) # Output tipico di ResNet: (1, 512, 1, 1)
-
-            # Appiattisce il tensore per rimuovere tutte le dimensioni di 1 e renderlo 1D
-            # Ad esempio, da (1, 512, 1, 1) a (512,) dopo unsqueeze(0)
-            return features.squeeze(0).flatten() # <--- USA .flatten() QUI
-            # O equivalentemente: return features.view(features.size(0), -1).squeeze(0)
-            # O anche più semplicemente se sai che è (1, N, 1, 1) -> return features.view(-1)
+    
 
     def get_state_shape(self):
-        dummy_image = self.original_image.unsqueeze(0).to(self.device)
+        """
+        Restituisce la forma dell'embedding di stato.
+        """
+        dummy_input = torch.randn(1, 3, 224, 224).to(self.device) # Esempio: 224x224
         with torch.no_grad():
-            features = self.encoder(dummy_image)
-            # Deve restituire la forma del tensore 1D
-        return features.squeeze(0).flatten().shape # <--- Assicurati che anche qui sia 1D
+            features = self.classifier.encoder(dummy_input)
+        return features.squeeze(0).shape # Dovrebbe essere torch.Size([512])
 
     def get_num_actions(self):
+        """Restituisce il numero totale di azioni disponibili."""
         return get_num_actions()
