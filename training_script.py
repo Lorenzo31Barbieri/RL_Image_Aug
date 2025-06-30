@@ -1,57 +1,89 @@
 # training_script.py
 import torch
-import random
+import torch.nn as nn # Necessario per nn.Module, utile per il debug
+from vgg_classifier import VGGClassifierWrapper
 import os
 from PIL import Image
 from agent import DQNAgent 
 from environment import ImageAugmentationEnv
-from transforms import get_num_actions, get_all_transforms
+from transforms import get_num_actions, get_all_transforms # get_all_transforms è ancora usato per creare la lista, ma non passata all'env
 from dataset import PetImagesDataset
 from torch.utils.data import DataLoader
-from my_cnn_model import MyCNN
+# from my_cnn_model import MyCNN # Rimuovi, non più usata come classificatore principale
 
 # --- Configurazione del Dataset ---
+# Assicurati che DATA_ROOT_DIR punti alla tua cartella 'data_classifier'
+# se l'hai creata con lo script prepare_classifier_data.py.
+# Altrimenti, punta alla cartella 'data' originale, ma la sua struttura
+# non è quella attesa dal classificatore VGG16 per il suo addestramento.
+# Per l'agente RL, PetImagesDataset legge da 'data/cat' e 'data/dog', quindi
+# se il tuo dataset originale è così, va bene.
 DATA_ROOT_DIR = './data'
-PRE_TRAINED_CLASSIFIER_PATH = 'pre_trained_classifier.pth'
+PRE_TRAINED_CLASSIFIER_PATH = './output/VGG16_trained.pth' # Percorso del tuo .pth dal training del VGG16
 IMAGE_SIZE = 224
+NUM_CLASSES = 2
+
+# Assicurati che la cartella 'models' esista per salvare i modelli dell'agente
+if not os.path.exists('./models'):
+    os.makedirs('./models')
 
 if __name__ == '__main__':
     num_total_episodes = 20000
     max_steps_per_episode = 5
-    state_dim = 512
+    state_dim = 25088 # Conferma che questo sia l'output size dell'encoder VGG16
     action_dim = get_num_actions()
     
     # Impostazione del Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # Caricamento e Congelamento del Classificatore CNN Pre-addestrato
-    print("\n1. Caricamento e congelamento del Classificatore (MyCNN)...")
-    classifier_model = MyCNN(num_classes=2).to(device)
+    # 1. Caricamento e configurazione del classificatore pre-addestrato
+    print("Loading pre-trained VGG16 classifier...")
     
-    # Carica i pesi pre-addestrati.
-    if os.path.exists(PRE_TRAINED_CLASSIFIER_PATH):
-        classifier_model.load_state_dict(torch.load(PRE_TRAINED_CLASSIFIER_PATH, map_location=device))
-        print(f"Classificatore caricato da: {PRE_TRAINED_CLASSIFIER_PATH}")
-    else:
-        print(f"ERRORE: File '{PRE_TRAINED_CLASSIFIER_PATH}' non trovato. Assicurati di aver pre-addestrato e salvato la tua CNN.")
-        print("Uscita. Si prega di pre-addestrare il classificatore prima di eseguire questo script.")
-        exit() # Termina lo script se il modello non è trovato
+    # Crea un'istanza del tuo wrapper VGG16 (che caricherà VGG16 pre-addestrato su ImageNet)
+    classifier_model = VGGClassifierWrapper(num_classes=NUM_CLASSES).to(device)
 
-    # Congela i pesi del classificatore
+    # Carica i pesi del tuo VGG16 addestrato sui gatti/cani dal tuo repo.
+    # Il percorso deve puntare al .pth che hai generato dal file del repo
+    try:
+        # Carica il state_dict originale
+        state_dict = torch.load(PRE_TRAINED_CLASSIFIER_PATH, map_location=device)
+        
+        # Crea un nuovo state_dict con i prefissi corretti
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            if k.startswith('features.') or k.startswith('classifier.'):
+                new_state_dict['vgg16.' + k] = v
+            else:
+                new_state_dict[k] = v
+        
+        # Carica il state_dict modificato. Usiamo strict=False.
+        classifier_model.load_state_dict(new_state_dict, strict=False)
+        print(f"Successfully loaded classifier weights from {PRE_TRAINED_CLASSIFIER_PATH} (prefix adjusted, strict=False)")
+    except FileNotFoundError:
+        print(f"Error: Classifier .pth file not found at {PRE_TRAINED_CLASSIFIER_PATH}")
+        print("Please ensure you have run the VGG16 training script from the GitHub repo")
+        print("and that the path 'PRE_TRAINED_CLASSIFIER_PATH' is correct.")
+        exit() # Esci dal programma se il file non è trovato
+
+    # Il congelamento dei pesi "features" è già gestito nella VGGClassifierWrapper
+    # e verrà ri-applicato qui per sicurezza all'intero modello:
     classifier_model.eval()
     for param in classifier_model.parameters():
         param.requires_grad = False
-    print("Pesi del classificatore congelati. Sarà usato solo per inferenza.")
+    
+    print("Classifier loaded and weights frozen.")
 
-    # Inizializza la lista di tutte le trasformazioni
-    all_transforms_list = get_all_transforms(IMAGE_SIZE)
+    # Inizializza la lista di tutte le trasformazioni (questa è necessaria per l'agente e get_action_transform)
+    # ma non viene passata all'ambiente direttamente.
+    all_transforms_list = get_all_transforms(IMAGE_SIZE) 
 
     # Prepara il Dataset per gli EPISODI RL
-    from torchvision import transforms
+    from torchvision import transforms # Già importato
     preprocess_for_classifier = transforms.Compose([
-        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)), # 224
         transforms.ToTensor(),
+        # Questa normalizzazione è CRUCIALE e deve corrispondere a quella usata per addestrare VGG16
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
     
@@ -87,8 +119,8 @@ if __name__ == '__main__':
 
         # Inizializza l'ambiente per questo episodio
         env = ImageAugmentationEnv(
-            classifier=classifier_model, # Passiamo il MyCNN congelato
-            all_transforms_list=all_transforms_list, # Lista delle funzioni di trasformazione
+            classifier=classifier_model, # Passiamo il classificatore VGG16 congelato
+            # RIMOSSO: all_transforms_list=all_transforms_list, # Questo parametro non esiste in ImageAugmentationEnv.__init__
             max_steps=max_steps_per_episode
         )
         
