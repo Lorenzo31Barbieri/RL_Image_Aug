@@ -29,7 +29,7 @@ class DQNAgent:
         self.epsilon_decay = epsilon_decay
         self.batch_size = batch_size
         self.target_update_freq = target_update_freq
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
         # Inizializza Q-Network e Target Q-Network
         self.q_network = QNetwork(state_dim, action_dim).to(self.device)

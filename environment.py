@@ -16,7 +16,7 @@ class ImageAugmentationEnv:
         for param in self.classifier.parameters():
             param.requires_grad = False 
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
         # Inizializza lo stato interno dell'ambiente
         self.original_image = None # Sarà impostato in reset()

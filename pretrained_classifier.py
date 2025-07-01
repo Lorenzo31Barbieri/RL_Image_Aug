@@ -23,7 +23,7 @@ IMAGE_SIZE = 224
 TRAIN_SPLIT_RATIO = 0.8 # 80% per training, 20% per validazione
 
 def pretrain_classifier():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
 
     # 1. Definizione delle Trasformazioni per il Dataset

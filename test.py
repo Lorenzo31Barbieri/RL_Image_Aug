@@ -1,7 +1,14 @@
 import torch
 from vgg_classifier import VGGClassifierWrapper
 
-dummy_input = torch.randn(1, 3, 224, 224) # Batch size 1, 3 canali, 224x224
-model_test = VGGClassifierWrapper()
-encoder_output = model_test.encoder(dummy_input)
-print(encoder_output.shape) # Dovrebbe stampare torch.Size([1, 25088])
+# Check that MPS is available
+if not torch.backends.mps.is_available():
+    if not torch.backends.mps.is_built():
+        print("MPS not available because the current PyTorch install was not "
+              "built with MPS enabled.")
+    else:
+        print("MPS not available because the current MacOS version is not 12.3+ "
+              "and/or you do not have an MPS-enabled device on this machine.")
+        
+else:
+    print("Ok")

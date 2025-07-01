@@ -19,7 +19,7 @@ class ImageClassifier:
             model_path (str, optional): Percorso da cui caricare i pesi pre-esistenti del modello.
                                         Se None, il modello viene inizializzato casualmente.
         """
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
         
         self.model = MyCNN(num_classes=num_classes).to(self.device)
         
