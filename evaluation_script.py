@@ -13,12 +13,14 @@ PRE_TRAINED_CLASSIFIER_PATH = './output/VGG16_trained.pth'
 DQN_MODEL_PATH = './models/dqn_q_network_episode_20000.pth' # IL CHECKPOINT DA VALUTARE
 IMAGE_SIZE = 224
 NUM_CLASSES = 2
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 state_dim = 25088
 action_dim = get_num_actions()
 max_steps_per_episode = 5 # Puoi anche non applicare un max_steps qui, se l'obiettivo è solo testare
 
+
 def evaluate_agent():
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+    device = DEVICE
     print(f"Using device: {device}")
 
     # Carica il classificatore VGG16 (come prima)
@@ -44,7 +46,7 @@ def evaluate_agent():
     print("Classifier loaded and weights frozen.")
 
     # Inizializza l'agente DQN
-    agent = DQNAgent(state_dim, action_dim)
+    agent = DQNAgent(state_dim, action_dim, device)
     
     # *** Carica i pesi dell'agente DQN ***
     if os.path.exists(DQN_MODEL_PATH):
@@ -86,7 +88,8 @@ def evaluate_agent():
 
     env = ImageAugmentationEnv(
         classifier=classifier_model,
-        max_steps=max_steps_per_episode
+        max_steps=max_steps_per_episode,
+        device=DEVICE
     )
     
     print(f"\nEvaluating agent on image: {test_image_path} (True Label: {true_label})")

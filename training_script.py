@@ -15,6 +15,7 @@ DATA_ROOT_DIR = './data'
 PRE_TRAINED_CLASSIFIER_PATH = './output/VGG16_trained.pth'
 IMAGE_SIZE = 224
 NUM_CLASSES = 2
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Percorso per caricare/salvare i checkpoint dell'agente DQN
 DQN_CHECKPOINT_DIR = './models' # La tua cartella 'models'
@@ -32,16 +33,14 @@ if __name__ == '__main__':
     max_steps_per_episode = 5
     state_dim = 25088
     action_dim = get_num_actions()
-    
-    # Impostazione del Device
-    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    print(f"Using device: {device}")
+
+    print(f"Using device: {DEVICE}")
 
     # 1. Caricamento e configurazione del classificatore pre-addestrato (UGUALE A PRIMA)
     print("Loading pre-trained VGG16 classifier...")
-    classifier_model = VGGClassifierWrapper(num_classes=NUM_CLASSES).to(device)
+    classifier_model = VGGClassifierWrapper(num_classes=NUM_CLASSES).to(DEVICE)
     try:
-        state_dict = torch.load(PRE_TRAINED_CLASSIFIER_PATH, map_location=device)
+        state_dict = torch.load(PRE_TRAINED_CLASSIFIER_PATH, map_location=DEVICE)
         new_state_dict = {}
         for k, v in state_dict.items():
             if k.startswith('features.') or k.startswith('classifier.'):
@@ -76,14 +75,14 @@ if __name__ == '__main__':
 
     # 2. Inizializzare/Caricare Agente RL
     print("\n2. Inizializzazione/Caricamento Agente RL...")
-    agent = DQNAgent(state_dim, action_dim) # Inizializza l'agente
+    agent = DQNAgent(state_dim, action_dim, DEVICE) # Inizializza l'agente
     
     global_episode_counter = 0 # Inizializza il contatore degli episodi
     
     if LOAD_DQN_CHECKPOINT:
         try:
-            agent.q_network.load_state_dict(torch.load(LOAD_DQN_CHECKPOINT, map_location=device))
-            agent.target_q_network.load_state_dict(torch.load(LOAD_DQN_CHECKPOINT, map_location=device))
+            agent.q_network.load_state_dict(torch.load(LOAD_DQN_CHECKPOINT, map_location=DEVICE))
+            agent.target_q_network.load_state_dict(torch.load(LOAD_DQN_CHECKPOINT, map_location=DEVICE))
             
             # Estrai il numero dell'episodio dal nome del file per ripartire
             # Questo è un approccio semplice, potresti voler salvare il counter esplicitamente
@@ -132,7 +131,8 @@ if __name__ == '__main__':
 
         env = ImageAugmentationEnv(
             classifier=classifier_model,
-            max_steps=max_steps_per_episode
+            max_steps=max_steps_per_episode,
+            device=DEVICE
         )
         
         state = env.reset(image_tensor, true_label_for_episode)

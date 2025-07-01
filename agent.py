@@ -17,7 +17,7 @@ class QNetwork(nn.Module):
         return self.fc3(x)
 
 class DQNAgent:
-    def __init__(self, state_dim, action_dim, lr=1e-4, gamma=0.99, epsilon_start=1.0,
+    def __init__(self, state_dim, action_dim, device, lr=1e-4, gamma=0.99, epsilon_start=1.0,
                  epsilon_end=0.01, epsilon_decay=0.995, replay_buffer_size=10000,
                  batch_size=64, target_update_freq=100):
         
@@ -29,7 +29,7 @@ class DQNAgent:
         self.epsilon_decay = epsilon_decay
         self.batch_size = batch_size
         self.target_update_freq = target_update_freq
-        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+        self.device = device
 
         # Inizializza Q-Network e Target Q-Network
         self.q_network = QNetwork(state_dim, action_dim).to(self.device)

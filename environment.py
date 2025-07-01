@@ -1,14 +1,13 @@
 import torch
-from my_cnn_model import MyCNN
 from transforms import get_action_transform, get_num_actions
 
 class ImageAugmentationEnv:
-    def __init__(self, classifier, max_steps=5): 
+    def __init__(self, classifier, device, max_steps=5): 
         """
         Inizializza l'ambiente di Image Augmentation.
 
         Args:
-            classifier (MyCNN): L'istanza del classificatore, già pre-addestrato.
+            classifier: L'istanza del classificatore, già pre-addestrato.
             max_steps (int): Numero massimo di azioni che l'agente può eseguire in un episodio.
         """
         self.classifier = classifier
@@ -16,7 +15,7 @@ class ImageAugmentationEnv:
         for param in self.classifier.parameters():
             param.requires_grad = False 
 
-        self.device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+        self.device = device
 
         # Inizializza lo stato interno dell'ambiente
         self.original_image = None # Sarà impostato in reset()
