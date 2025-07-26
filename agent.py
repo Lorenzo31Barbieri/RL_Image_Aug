@@ -9,41 +9,50 @@ from collections import deque
 
 class QNetwork(nn.Module):
     """
-    Attributes:
-        state_dim (int): number of classifier logits, set to 10.
-        action_dim (int): number of actions.
+    Improved Q-Network with better architecture for enhanced state representation.
     """
 
-    def __init__(self, state_dim, action_dim):
+    def __init__(self, state_dim, action_dim, hidden_dim=256):
         super(QNetwork, self).__init__()
-        self.fc1 = nn.Linear(state_dim, 64)
-        self.fc2 = nn.Linear(64, action_dim)
+        
+        # Deeper network with dropout for better generalization
+        self.fc1 = nn.Linear(state_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.fc3 = nn.Linear(hidden_dim, hidden_dim // 2)
+        self.fc4 = nn.Linear(hidden_dim // 2, action_dim)
+        
+        self.dropout = nn.Dropout(0.2)
+        self.layer_norm1 = nn.LayerNorm(hidden_dim)
+        self.layer_norm2 = nn.LayerNorm(hidden_dim)
+        
+        # Initialize weights
+        self._init_weights()
+
+    def _init_weights(self):
+        """Initialize network weights using Xavier initialization."""
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                nn.init.constant_(module.bias, 0)
 
     def forward(self, state):
-        x = F.relu(self.fc1(state))
-        return self.fc2(x)
+        x = F.relu(self.layer_norm1(self.fc1(state)))
+        x = self.dropout(x)
+        x = F.relu(self.layer_norm2(self.fc2(x)))
+        x = self.dropout(x)
+        x = F.relu(self.fc3(x))
+        return self.fc4(x)
+
 
 class DQNAgent:
     """
-        The RL agent.
-
-        Attributes:
-            state_dim (int): number of classifier logits, set to 10.
-            action_dim (int): number of actions.
-            device (string): gpu device (cuda or mps).
-            gamma (float): discount factor.
-            lr (float): learning rate.
-            epsilon_start(float): hyperparameter.
-            epsilon_end (float): hyperparameter.
-            epsilon_decay (float): hyperparameter.
-            buffer_size (int): buffer dimension.
-            batch_size(int): batch dimension.
-            target_update_freq (int): how often to update the target network.
+    Improved DQN Agent with better exploration strategy and learning mechanisms.
     """
     
-    def __init__(self, state_dim, action_dim, device, gamma=0.99, lr=0.0005,
-                 epsilon_start=1.0, epsilon_end=0.01, epsilon_decay=0.995,
-                 buffer_size=10000, batch_size=64, target_update_freq=100):
+    def __init__(self, state_dim, action_dim, device, gamma=0.95, lr=0.001,
+                 epsilon_start=1.0, epsilon_end=0.01, epsilon_decay=0.9995,
+                 buffer_size=50000, batch_size=128, target_update_freq=500,
+                 double_dqn=True, prioritized_replay=False):
         
         self.state_dim = state_dim
         self.action_dim = action_dim
@@ -55,78 +64,207 @@ class DQNAgent:
         self.batch_size = batch_size
         self.target_update_freq = target_update_freq
         self.update_counter = 0
+        self.double_dqn = double_dqn
+        self.prioritized_replay = prioritized_replay
 
+        # Networks
         self.q_network = QNetwork(state_dim, action_dim).to(device)
         self.target_q_network = QNetwork(state_dim, action_dim).to(device)
         self.target_q_network.load_state_dict(self.q_network.state_dict())
         self.target_q_network.eval()
 
-        self.optimizer = optim.Adam(self.q_network.parameters(), lr=lr)
-        self.replay_buffer = deque(maxlen=buffer_size)
-
-    def select_action(self, state):
-        """
-        Given a state, returns the action with the highest Q-value (epsilon-greedy policy).
-        """
-
-        if random.random() < self.epsilon:
-            return random.randrange(self.action_dim)
+        # Optimizer with weight decay for regularization
+        self.optimizer = optim.Adam(self.q_network.parameters(), lr=lr, weight_decay=1e-5)
+        
+        # Learning rate scheduler
+        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=2000, gamma=0.9)
+        
+        # Experience replay
+        if prioritized_replay:
+            self.replay_buffer = PrioritizedReplayBuffer(buffer_size)
         else:
+            self.replay_buffer = deque(maxlen=buffer_size)
+        
+        # Action frequency tracking for exploration bonus
+        self.action_counts = np.zeros(action_dim)
+        self.total_actions = 0
+
+    def select_action(self, state, training=True):
+        """
+        Enhanced action selection with exploration bonuses.
+        """
+        if training and random.random() < self.epsilon:
+            # Epsilon-greedy with action frequency consideration
+            if self.total_actions > 1000:  # After some experience
+                # Favor less-used actions for better exploration
+                action_probs = 1.0 / (self.action_counts + 1)
+                action_probs = action_probs / action_probs.sum()
+                return np.random.choice(self.action_dim, p=action_probs)
+            else:
+                return random.randrange(self.action_dim)
+        else:
+            # Greedy action selection
             state_tensor = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
             with torch.no_grad():
                 q_values = self.q_network(state_tensor)
-            return torch.argmax(q_values).item()
+            
+            action = torch.argmax(q_values).item()
+            
+            # Track action frequency
+            if training:
+                self.action_counts[action] += 1
+                self.total_actions += 1
+            
+            return action
 
     def store_experience(self, state, action, reward, next_state, done):
-        self.replay_buffer.append((state, action, reward, next_state, done))
+        """Store experience in replay buffer."""
+        if self.prioritized_replay:
+            # Calculate TD error for prioritization
+            with torch.no_grad():
+                state_tensor = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
+                next_state_tensor = torch.from_numpy(next_state).float().unsqueeze(0).to(self.device)
+                
+                current_q = self.q_network(state_tensor)[0, action]
+                if done:
+                    target_q = reward
+                else:
+                    next_q = self.target_q_network(next_state_tensor).max(1)[0]
+                    target_q = reward + self.gamma * next_q
+                
+                td_error = abs(current_q - target_q).item()
+            
+            self.replay_buffer.add(state, action, reward, next_state, done, td_error)
+        else:
+            self.replay_buffer.append((state, action, reward, next_state, done))
 
     def learn(self):
         """
-        The heart of the DQN algorithm.
-        1. Extract a batch of experiences from the replay buffer.
-        2. Calcutate Q-values from the Q network.
-        3. Calculate Q-values from the Target network using Bellman equation.
-        4. Calculate MSE between the two sets of Q-values.
-        5. Backpropagation to update Q-network weights.
-        6. Periodically, update the Target network with Q-network weights.
+        Enhanced learning with Double DQN and improved loss calculation.
         """
-        
-        if len(self.replay_buffer) < self.batch_size:
-            return None # Not enough experiences to learn
+        if (self.prioritized_replay and len(self.replay_buffer) < self.batch_size) or \
+           (not self.prioritized_replay and len(self.replay_buffer) < self.batch_size):
+            return None
 
-        experiences = random.sample(self.replay_buffer, self.batch_size)
-        states, actions, rewards, next_states, dones = zip(*experiences)
+        # Sample experiences
+        if self.prioritized_replay:
+            experiences, indices, weights = self.replay_buffer.sample(self.batch_size)
+            states, actions, rewards, next_states, dones = zip(*experiences)
+            weights = torch.from_numpy(weights).float().to(self.device)
+        else:
+            experiences = random.sample(self.replay_buffer, self.batch_size)
+            states, actions, rewards, next_states, dones = zip(*experiences)
+            weights = torch.ones(self.batch_size).to(self.device)
 
+        # Convert to tensors
         states = torch.from_numpy(np.vstack(states)).float().to(self.device)
         actions = torch.from_numpy(np.vstack(actions)).long().to(self.device)
         rewards = torch.from_numpy(np.vstack(rewards)).float().to(self.device)
         next_states = torch.from_numpy(np.vstack(next_states)).float().to(self.device)
         dones = torch.from_numpy(np.vstack(dones).astype(np.uint8)).float().to(self.device)
 
-        # Get Q values from current Q-network
-        q_values = self.q_network(states).gather(1, actions)
+        # Current Q values
+        current_q_values = self.q_network(states).gather(1, actions)
 
-        # Get max Q values from target Q-network for next states
+        # Calculate target Q values
         with torch.no_grad():
-            next_q_values = self.target_q_network(next_states).max(1)[0].unsqueeze(1)
+            if self.double_dqn:
+                # Double DQN: use main network to select actions, target network to evaluate
+                next_actions = self.q_network(next_states).argmax(1).unsqueeze(1)
+                next_q_values = self.target_q_network(next_states).gather(1, next_actions)
+            else:
+                # Standard DQN
+                next_q_values = self.target_q_network(next_states).max(1)[0].unsqueeze(1)
             
-        # Compute target Q values
-        target_q_values = rewards + (self.gamma * next_q_values * (1 - dones))
+            target_q_values = rewards + (self.gamma * next_q_values * (1 - dones))
 
-        # Compute loss
-        loss = F.mse_loss(q_values, target_q_values)
+        # Compute weighted loss
+        td_errors = current_q_values - target_q_values
+        loss = (weights * td_errors.pow(2)).mean()
 
-        # Optimize the Q-network
+        # Optimize
         self.optimizer.zero_grad()
         loss.backward()
+        
+        # Gradient clipping for stability
+        torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), 1.0)
+        
         self.optimizer.step()
+        self.scheduler.step()
 
         # Update target network
         self.update_counter += 1
         if self.update_counter % self.target_update_freq == 0:
             self.target_q_network.load_state_dict(self.q_network.state_dict())
 
+        # Update prioritized replay buffer
+        if self.prioritized_replay:
+            td_errors_np = td_errors.detach().cpu().numpy()
+            for i, td_error in enumerate(td_errors_np):
+                self.replay_buffer.update_priority(indices[i], abs(td_error[0]))
+
         # Decay epsilon
         self.epsilon = max(self.epsilon_end, self.epsilon * self.epsilon_decay)
         
         return loss.item()
+
+    def get_action_distribution(self):
+        """Get the distribution of actions taken during training."""
+        if self.total_actions == 0:
+            return np.ones(self.action_dim) / self.action_dim
+        return self.action_counts / self.total_actions
+
+
+class PrioritizedReplayBuffer:
+    """
+    Prioritized Experience Replay Buffer.
+    """
+    
+    def __init__(self, capacity, alpha=0.6, beta_start=0.4, beta_frames=100000):
+        self.capacity = capacity
+        self.alpha = alpha
+        self.beta_start = beta_start
+        self.beta_frames = beta_frames
+        self.frame = 1
+        
+        self.buffer = []
+        self.pos = 0
+        self.priorities = np.zeros((capacity,), dtype=np.float32)
+    
+    def add(self, state, action, reward, next_state, done, td_error):
+        max_priority = self.priorities.max() if self.buffer else 1.0
+        
+        if len(self.buffer) < self.capacity:
+            self.buffer.append((state, action, reward, next_state, done))
+        else:
+            self.buffer[self.pos] = (state, action, reward, next_state, done)
+        
+        self.priorities[self.pos] = max_priority
+        self.pos = (self.pos + 1) % self.capacity
+    
+    def sample(self, batch_size):
+        if len(self.buffer) == self.capacity:
+            priorities = self.priorities
+        else:
+            priorities = self.priorities[:self.pos]
+        
+        probabilities = priorities ** self.alpha
+        probabilities /= probabilities.sum()
+        
+        indices = np.random.choice(len(self.buffer), batch_size, p=probabilities)
+        experiences = [self.buffer[idx] for idx in indices]
+        
+        # Calculate importance sampling weights
+        beta = min(1.0, self.beta_start + self.frame * (1.0 - self.beta_start) / self.beta_frames)
+        weights = (len(self.buffer) * probabilities[indices]) ** (-beta)
+        weights /= weights.max()
+        
+        self.frame += 1
+        
+        return experiences, indices, weights
+    
+    def update_priority(self, idx, td_error):
+        self.priorities[idx] = td_error + 1e-6
+    
+    def __len__(self):
+        return len(self.buffer)
