@@ -1,43 +1,72 @@
+# evaluation_script.py (Updated for CIFAR10)
+
 import torch
-import torch.nn as nn
 import os
-from PIL import Image
 import numpy as np
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
-
-# Importa i tuoi moduli personalizzati
-from vgg_classifier import VGGClassifierWrapper
-from agent import DQNAgent
+import torchvision
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+from vgg import VGG
+from agent import DQNAgent 
 from environment import ImageAugmentationEnv
 from transforms import get_num_actions, get_all_transforms
-from dataset import PetImagesDataset # Assicurati che PetImagesDataset funzioni per test set
-from torch.utils.data import DataLoader
-from torchvision import transforms
 
 # --- CONFIGURAZIONE GLOBALE ---
-# Imposta il dispositivo una sola volta qui!
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# Se hai una GPU NVIDIA e vuoi usare CUDA, decommenta la riga sotto e commenta quella sopra:
-# DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 print(f"Using device: {DEVICE}")
 
 # --- Configurazione del Dataset e Percorsi ---
-DATA_ROOT_DIR = './data' # Assicurati che questo sia il percorso della tua cartella 'data'
-PRE_TRAINED_CLASSIFIER_PATH = './output/VGG16_trained.pth' # Percorso del classificatore pre-addestrato
-DQN_MODEL_PATH = './models/dqn_q_network_episode_20000.pth' # **CAMBIA QUESTO**: Percorso del checkpoint dell'agente DQN da valutare
-IMAGE_SIZE = 224
-NUM_CLASSES = 2
-MAX_STEPS_PER_EPISODE = 5 # Numero massimo di trasformazioni per episodio RL
+DATA_ROOT_DIR = './data' 
+PRE_TRAINED_CLASSIFIER_PATH = './checkpoint/ckpt.pth' # Percorso del classificatore CIFAR10
+# **CAMBIA QUESTO**: Percorso del checkpoint dell'agente DQN da valutare
+DQN_MODEL_PATH = './models/best_dqn_model.pth' 
+IMAGE_SIZE = 32 # CIFAR10 images are 32x32
+NUM_CLASSES = 10 # CIFAR10 has 10 classes
 
 # Dimensioni dello stato e delle azioni per l'Agente RL
-# Il state_dim (features estratte dal VGG) dovrebbe essere 25088 per VGG16
-STATE_DIM = 25088 
+STATE_DIM = NUM_CLASSES # Lo stato è l'output (logits) del VGG
 ACTION_DIM = get_num_actions()
+MAX_STEPS_PER_EPISODE = 5 # Numero massimo di trasformazioni per episodio RL
 
 # --- Funzioni di Valutazione ---
+
+def load_classifier_model_for_eval():
+    print("Loading pre-trained VGG19 CIFAR10 classifier for evaluation...")
+    classifier_model = VGG('VGG19').to(DEVICE) 
+    
+    try:
+        checkpoint = torch.load(PRE_TRAINED_CLASSIFIER_PATH, map_location=DEVICE)
+        
+        new_state_dict = {}
+        for k, v in checkpoint['net'].items():
+            if k.startswith('module.'):
+                new_state_dict[k[7:]] = v
+            else:
+                new_state_dict[k] = v
+        
+        classifier_model.load_state_dict(new_state_dict, strict=True)
+        print(f"Successfully loaded classifier weights from {PRE_TRAINED_CLASSIFIER_PATH}")
+        print(f"Classifier accuracy from checkpoint: {checkpoint['acc']:.2f}%")
+        
+    except FileNotFoundError:
+        print(f"Error: Classifier .pth file not found at {PRE_TRAINED_CLASSIFIER_PATH}")
+        print("Please ensure you have trained your CIFAR10 VGG model and saved it as ckpt.pth in the 'checkpoint' directory.")
+        exit()
+    except KeyError:
+        print(f"Error: Invalid checkpoint format at {PRE_TRAINED_CLASSIFIER_PATH}. Expected 'net' key.")
+        exit()
+    except Exception as e:
+        print(f"An unexpected error occurred while loading classifier: {e}")
+        exit()
+
+    classifier_model.eval()
+    for param in classifier_model.parameters():
+        param.requires_grad = False
+    print("Classifier loaded and weights frozen.")
+    return classifier_model
+
 
 def evaluate_classifier(classifier_model, test_dataloader, device):
     """
@@ -79,33 +108,10 @@ def evaluate_classifier(classifier_model, test_dataloader, device):
     return accuracy, f1, avg_loss, conf_matrix
 
 def evaluate_agent():
-    """
-    Funzione principale per valutare l'agente RL e le correlazioni.
-    """
     device = DEVICE # Usa la variabile globale DEVICE
 
     # 1. Caricamento e configurazione del classificatore pre-addestrato
-    print("\n1. Loading pre-trained VGG16 classifier...")
-    classifier_model = VGGClassifierWrapper(num_classes=NUM_CLASSES).to(device)
-    try:
-        state_dict = torch.load(PRE_TRAINED_CLASSIFIER_PATH, map_location=device)
-        # Ajusta le chiavi se necessario (per la compatibilità con il tuo VGGClassifierWrapper)
-        new_state_dict = {}
-        for k, v in state_dict.items():
-            if k.startswith('features.') or k.startswith('classifier.'):
-                new_state_dict['vgg16.' + k] = v
-            else:
-                new_state_dict[k] = v
-        classifier_model.load_state_dict(new_state_dict, strict=False)
-        print(f"Successfully loaded classifier weights from {PRE_TRAINED_CLASSIFIER_PATH}")
-    except FileNotFoundError:
-        print(f"Error: Classifier .pth file not found at {PRE_TRAINED_CLASSIFIER_PATH}")
-        print("Please ensure you have trained and saved your VGG16 classifier.")
-        return
-    classifier_model.eval()
-    for param in classifier_model.parameters():
-        param.requires_grad = False
-    print("Classifier loaded and weights frozen.")
+    classifier_model = load_classifier_model_for_eval()
 
     # 2. Inizializzazione e Caricamento dell'Agente RL
     print("\n2. Initializing and Loading RL Agent...")
@@ -132,59 +138,56 @@ def evaluate_agent():
         agent.epsilon = 0.0
 
     # 3. Preparazione del Dataset per la Valutazione
-    # Pre-elaborazione per il classificatore (stessa usata per il training del classificatore e dell'agente)
+    # Pre-elaborazione per il classificatore (stessa usata per il training del classificatore)
     preprocess_for_classifier = transforms.Compose([
-        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        transforms.ToTensor(), # Immagini CIFAR10 sono già 32x32
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
     ])
 
-    # Dataset completo (sarà diviso per test set del classificatore e per episodi RL)
-    dataset = PetImagesDataset(root_dir=DATA_ROOT_DIR, transform=preprocess_for_classifier)
+    # Usiamo il testset CIFAR10 per la valutazione del classificatore e per gli episodi RL
+    test_dataset = torchvision.datasets.CIFAR10(
+        root=DATA_ROOT_DIR, train=False, download=True, transform=preprocess_for_classifier)
     
-    # DataLoader per la valutazione del classificatore (usiamo lo stesso dataset, ma potresti averne uno dedicato)
-    test_classifier_dataloader = DataLoader(dataset, batch_size=64, shuffle=False, num_workers=4)
-
+    test_classifier_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=False, num_workers=0) # num_workers=0
+    
     # DataLoader per gli episodi RL (batch_size=1 per singola immagine per episodio)
-    rl_episode_dataloader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=4)
-    rl_episode_iter = iter(rl_episode_dataloader)
+    rl_episode_loader = DataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=0) # num_workers=0
+    rl_episode_iter = iter(rl_episode_loader)
 
-    all_transforms_list = get_all_transforms() # Ottieni la lista di (funzione, nome_stringa)
+    all_transforms_list = get_all_transforms() 
 
     # --- INIZIO VALUTAZIONE ---
 
-    # Fase 1: Valutazione del Classificatore Base
+    # Fase 1: Valutazione del Classificatore Puro
     print("\n--- Phase 1: Evaluating the base Classifier ---")
     base_accuracy, base_f1, base_loss, base_conf_matrix = evaluate_classifier(classifier_model, test_classifier_dataloader, device)
 
-    # Fase 2: Valutazione dell'Agente RL
+    # Fase 2: Valutazione dell'Agente RL (con l'interazione nell'ambiente)
     print("\n--- Phase 2: Evaluating the RL Agent Performance ---")
     
-    num_evaluation_episodes = 500 # Numero di episodi per testare l'agente
+    num_evaluation_episodes = 500 
     total_rewards_rl = []
-    transform_counts = {tf_name: 0 for tf_func, tf_name in all_transforms_list} # Inizializza contatore trasformazioni
-
-    # Dati per la correlazione
-    episode_final_rewards = []
-    episode_final_accuracies = []
-    episode_accuracy_improvements = []
+    transform_counts = {tf_name: 0 for tf_func, tf_name in all_transforms_list} 
     
+    episode_final_rewards = []
+    episode_final_accuracies = [] 
+    episode_accuracy_improvements = [] 
+
     print(f"Running {num_evaluation_episodes} evaluation episodes for the RL Agent...")
     for eval_episode in tqdm(range(num_evaluation_episodes), desc="Evaluating RL Agent"):
-        # Recupera una nuova immagine per l'episodio di valutazione
         try:
             image_tensor, true_label_for_episode_tensor = next(rl_episode_iter)
         except StopIteration:
-            rl_episode_iter = iter(rl_episode_dataloader)
+            rl_episode_iter = iter(rl_episode_loader)
             image_tensor, true_label_for_episode_tensor = next(rl_episode_iter)
 
-        image_tensor = image_tensor.squeeze(0).to(device) # Assicurati che l'immagine sia sul device
+        image_tensor = image_tensor.squeeze(0).to(device)
         true_label_for_episode = true_label_for_episode_tensor.item()
 
         env = ImageAugmentationEnv(
             classifier=classifier_model,
             max_steps=MAX_STEPS_PER_EPISODE,
-            device=device # Passa il DEVICE all'ambiente
+            device=device 
         )
         
         state = env.reset(image_tensor, true_label_for_episode)
@@ -197,7 +200,7 @@ def evaluate_agent():
 
         while not done:
             action = agent.select_action(state)
-            action_name = all_transforms_list[action][1] # Ottieni il nome dalla tupla
+            action_name = all_transforms_list[action][1] 
             transform_counts[action_name] += 1
 
             next_state, reward, done, info = env.step(action)
@@ -207,7 +210,6 @@ def evaluate_agent():
             
         total_rewards_rl.append(episode_reward)
 
-        # Raccogli dati per la correlazione
         final_prediction_info = info 
         final_accuracy = 1.0 if final_prediction_info['prediction'] == true_label_for_episode else 0.0
         
@@ -216,20 +218,23 @@ def evaluate_agent():
         episode_accuracy_improvements.append(final_accuracy - initial_accuracy)
 
     avg_rl_reward = np.mean(total_rewards_rl)
+    avg_final_accuracy_with_augmentation = np.mean(episode_final_accuracies) # Nuova metrica
     
     print(f"\n--- Agente RL Metrics ({num_evaluation_episodes} episodes) ---")
     print(f"Average Episode Reward: {avg_rl_reward:.2f}")
+    print(f"Average Final Accuracy (with augmentation): {avg_final_accuracy_with_augmentation:.4f}")
     print(f"Transformation Frequencies:")
     for name, count in sorted(transform_counts.items()):
         print(f"  - {name}: {count}")
     print("-" * 30)
 
-    # Plot delle frequenze delle trasformazioni
-    transform_names_for_plot = list(transform_counts.keys())
-    counts_for_plot = list(transform_counts.values())
+    import matplotlib.pyplot as plt
+    
+    transform_names = list(transform_counts.keys())
+    counts = list(transform_counts.values())
 
     plt.figure(figsize=(12, 7))
-    plt.bar(transform_names_for_plot, counts_for_plot, color='skyblue')
+    plt.bar(transform_names, counts, color='skyblue')
     plt.xlabel('Transformation', fontsize=12)
     plt.ylabel('Frequency', fontsize=12)
     plt.title('Frequency of Applied Transformations by RL Agent', fontsize=14)
@@ -239,7 +244,6 @@ def evaluate_agent():
     plt.savefig('transformation_frequencies.png')
     plt.show()
 
-    # Fase 3: Correlazione Reward vs Accuracy
     print("\n--- Phase 3: Correlating RL Metrics ---")
     
     plt.figure(figsize=(10, 6))
@@ -254,7 +258,6 @@ def evaluate_agent():
     plt.savefig('reward_vs_accuracy.png')
     plt.show()
 
-    # Distribuzione dell'Incremento di Accuracy
     plt.figure(figsize=(10, 6))
     plt.hist(episode_accuracy_improvements, bins=np.linspace(-1, 1, 21), edgecolor='black', alpha=0.7)
     plt.xlabel('Accuracy Improvement (Final - Initial)', fontsize=12)
@@ -270,6 +273,5 @@ def evaluate_agent():
     print(f"Average Accuracy Improvement across episodes: {np.mean(episode_accuracy_improvements):.4f}")
     print("-" * 30)
 
-# Esegui la valutazione
 if __name__ == '__main__':
     evaluate_agent()

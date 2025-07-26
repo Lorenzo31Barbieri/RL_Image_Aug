@@ -1,2 +1,7 @@
 __pycache__/
 output
+venv
+old
+models
+plots
+data

@@ -3,18 +3,28 @@ import random
 import torch
 
 class AugmentedImageBuffer:
+    """
+    Memorize finals augmented images and their labels.
+    ! This is NOT the Replay buffer !
+    Attributes:
+        capacity (int): buffer dimension.
+        buffer (List): list of tuples (image_tensor, true_label).
+        ptr (int): pointer to find oldest elements.
+    """
+
     def __init__(self, capacity):
         self.capacity = capacity
-        self.buffer = [] # Lista di tuple: (image_tensor, true_label)
-        self.ptr = 0 # Puntatore per sovrascrivere gli elementi più vecchi
+        self.buffer = []
+        self.ptr = 0
 
     def add(self, image_tensor, true_label):
-        """Aggiunge un'immagine aumentata e la sua etichetta originale al buffer."""
+        """
+        Add a new tuple (image, label) to the buffer.
+        """
+
         if len(self.buffer) < self.capacity:
             self.buffer.append(None) # Aggiungi placeholder se non al massimo della capacità
         
-        # Salviamo una copia per evitare problemi di riferimento o modifiche in-place
-        # Assicurati che image_tensor sia (C, H, W) e non (1, C, H, W)
         if image_tensor.ndim == 4:
             image_tensor = image_tensor.squeeze(0)
             
@@ -22,7 +32,10 @@ class AugmentedImageBuffer:
         self.ptr = (self.ptr + 1) % self.capacity
 
     def sample(self, batch_size):
-        """Campiona un batch di immagini aumentate dal buffer."""
+        """
+        Extract a sample of dimension batch_size from the buffer.
+        """
+        
         if len(self.buffer) < batch_size:
             return None, None # Non ci sono abbastanza immagini nel buffer
         
