@@ -9,10 +9,10 @@ from collections import deque
 from tqdm import tqdm
 
 # Import improved modules
-from agent import DQNAgent
-from environment import ImageAugmentationEnv
-from transforms import get_num_actions
-from vgg import VGG
+from src.models.agent import DQNAgent
+from src.environment.environment import ImageAugmentationEnv
+from src.environment.transforms import get_num_actions
+from src.models.vgg import VGG
 
 # --- GLOBAL CONFIGURATION ---
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")

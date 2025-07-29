@@ -146,7 +146,7 @@ def evaluate_tta(classifier_model: torch.nn.Module,
         # Configura TTA
         if method_used == 'ttach':
             tta_model = _setup_ttach_model(classifier_model)
-            num_augmentations = len(tta_model.tta_transforms.aug_transforms) + 1  # +1 per identità
+            num_augmentations = len(tta_model.transforms.aug_transforms) + 1  # +1 per identità
         else:
             tta_model = ManualTTAWrapper(classifier_model)
             num_augmentations = tta_model.get_num_augmentations()

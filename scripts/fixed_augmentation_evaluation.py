@@ -3,11 +3,11 @@
 import torch
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
-from torchvision import transforms
+from torchvision import src.environment.transforms as transforms
 from torch.utils.data import DataLoader
 import torchvision # Per CIFAR10 dataset
-from vgg import VGG
-from transforms import _ACTIONS_MAP # Importa direttamente _ACTIONS_MAP
+from src.models.vgg import VGG
+from src.environment.transforms import _ACTIONS_MAP # Importa direttamente _ACTIONS_MAP
 
 # --- CONFIGURAZIONE GLOBALE ---
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")

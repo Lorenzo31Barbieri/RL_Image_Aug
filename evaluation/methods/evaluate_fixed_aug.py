@@ -64,7 +64,7 @@ def evaluate_fixed_augmentation(classifier_model: torch.nn.Module,
     # Ottieni nomi delle trasformazioni
     augmentation_names = []
     try:
-        from transforms import _ACTIONS_MAP
+        from src.environment.transforms import _ACTIONS_MAP
         augmentation_names = [_ACTIONS_MAP[aid][1] for aid in augmentation_ids if aid in _ACTIONS_MAP]
     except ImportError:
         augmentation_names = [f"Transform_{aid}" for aid in augmentation_ids]

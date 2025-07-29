@@ -93,20 +93,40 @@ class EvaluationComparison:
         print("LOADING DATA")
         print(f"{'='*60}")
         
-        # Dataset per valutazioni che richiedono singole immagini
-        self.test_dataset = get_cifar10_test_dataset(
-            data_root=self.config['data_root']
-        )
-        
-        # DataLoader per valutazione baseline
-        self.test_loader, data_info = self.config.get('batch_size', 64)
-        from evaluation.core.data_utils import create_evaluation_dataloader
-        self.test_loader, data_info = create_evaluation_dataloader(
-            data_root=self.config['data_root'],
-            batch_size=self.config.get('batch_size', 64)
-        )
-        
-        print_data_loading_summary(self.test_loader, data_info)
+        try:
+            # Dataset per valutazioni che richiedono singole immagini
+            self.test_dataset = get_cifar10_test_dataset(
+                data_root=self.config['data_root']
+            )
+            
+            # DataLoader per valutazione baseline
+            batch_size = self.config.get('batch_size', 64)
+            self.test_loader = get_cifar10_test_loader(
+                data_root=self.config['data_root'],
+                batch_size=batch_size
+            )
+            
+            # Info sul dataset per il summary
+            data_info = {
+                'total_samples': len(self.test_dataset),
+                'batch_size': batch_size,
+                'num_batches': len(self.test_loader),
+                'num_workers': 0,
+                'pin_memory': torch.cuda.is_available(),
+                'distribution': {
+                    'num_classes': 10, 
+                    'class_counts': {i: len(self.test_dataset)//10 for i in range(10)}
+                }
+            }
+            
+            print_data_loading_summary(self.test_loader, data_info)
+            
+            self._data_loaded = True
+            print("✅ Data loaded successfully")
+            
+        except Exception as e:
+            print(f"❌ Error loading data: {e}")
+            raise
     
     def run_baseline_evaluation(self) -> None:
         """Esegue valutazione baseline."""

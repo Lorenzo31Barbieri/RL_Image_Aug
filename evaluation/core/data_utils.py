@@ -323,7 +323,7 @@ class FixedAugmentationTransform:
             action_ids_to_apply: Lista di ID delle azioni da applicare
         """
         try:
-            from transforms import _ACTIONS_MAP
+            from src.environment.transforms import _ACTIONS_MAP
             self.transforms_to_apply = []
             for action_id in action_ids_to_apply:
                 if action_id in _ACTIONS_MAP:

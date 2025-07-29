@@ -10,10 +10,10 @@ from torch.utils.data import DataLoader
 from collections import defaultdict
 
 # Import improved modules
-from vgg import VGG
-from agent import DQNAgent
-from environment import ImageAugmentationEnv
-from transforms import get_num_actions, get_all_transforms, get_action_name
+from src.models.vgg import VGG
+from src.models.agent import DQNAgent
+from src.environment.environment import ImageAugmentationEnv
+from src.environment.transforms import get_num_actions, get_all_transforms, get_action_name
 
 # --- GLOBAL CONFIGURATION ---
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")

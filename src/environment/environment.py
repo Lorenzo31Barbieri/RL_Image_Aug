@@ -2,7 +2,7 @@ import torch
 import torchvision.transforms as transforms
 import torch.nn.functional as F
 import numpy as np
-from transforms import get_action_transform
+from .transforms import get_action_transform
 
 
 class ImageAugmentationEnv:

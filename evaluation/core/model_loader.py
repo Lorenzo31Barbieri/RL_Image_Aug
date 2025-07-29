@@ -1,8 +1,8 @@
 import torch
 import os
 from typing import Dict, Any, Optional, Tuple
-from vgg import VGG
-from agent import DQNAgent
+from src.models.vgg import VGG
+from src.models.agent import DQNAgent
 
 # --- GLOBAL CONFIGURATION ---
 DEFAULT_CLASSIFIER_PATH = './checkpoint/ckpt.pth'
@@ -115,7 +115,7 @@ def load_rl_agent(model_path: str = DEFAULT_RL_MODEL_PATH,
     if action_dim is None:
         # Importa dinamicamente per evitare dipendenze circolari
         try:
-            from transforms import get_num_actions
+            from src.environment.transforms import get_num_actions
             action_dim = get_num_actions()
         except ImportError:
             print("⚠️ Warning: Could not import get_num_actions, using default action_dim=12")

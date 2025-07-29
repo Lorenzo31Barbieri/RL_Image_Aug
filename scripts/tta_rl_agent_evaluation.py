@@ -19,10 +19,10 @@ except ImportError:
     print("⚠️ ttach not available, using manual TTA implementation")
 
 # Import your improved modules
-from vgg import VGG # Assicurati che VGG sia in models.py, non vgg.py
-from agent import DQNAgent
-from environment import ImageAugmentationEnv
-from transforms import get_num_actions, get_action_name
+from src.models.vgg import VGG # Assicurati che VGG sia in models.py, non vgg.py
+from src.models.agent import DQNAgent
+from src.environment.environment import ImageAugmentationEnv
+from src.environment.transforms import get_num_actions, get_action_name
 
 # --- GLOBAL CONFIGURATION ---
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")

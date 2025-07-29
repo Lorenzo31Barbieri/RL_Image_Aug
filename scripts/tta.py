@@ -20,7 +20,7 @@ except ImportError:
     print("❌ ttach library not found. Install with: pip install ttach")
     print("Falling back to manual TTA implementation...")
 
-from vgg import VGG
+from src.models.vgg import VGG
 
 # --- GLOBAL CONFIGURATION ---
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")

@@ -14,7 +14,7 @@ import argparse
 # Assuming 'models' is a directory in the same path containing model definitions
 # e.g., models/VGG.py, models/ResNet.py etc.
 from models import *
-from utils import progress_bar
+from src.utils.utils import progress_bar
 
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
