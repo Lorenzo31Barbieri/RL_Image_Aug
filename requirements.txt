@@ -26,4 +26,5 @@ torch==2.7.1+cu118
 torchaudio==2.7.1+cu118
 torchvision==0.22.1+cu118
 tqdm==4.67.1
+ttach==0.0.3
 typing_extensions==4.12.2
