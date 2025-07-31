@@ -31,23 +31,23 @@ ACTION_DIM = get_num_actions()
 print(f"State dimension: {STATE_DIM}, Action dimension: {ACTION_DIM}")
 
 # Improved hyperparameters
-learning_rate = 0.0005  # Slightly lower for stability
+learning_rate = 0.0003  # Slightly lower for stability
 gamma = 0.95
 epsilon_start = 1.0
-epsilon_end = 0.01
-epsilon_decay = 0.9995
-buffer_size = 100000  # Larger buffer
+epsilon_end = 0.005
+epsilon_decay = 0.99975
+buffer_size = 200000  # Larger buffer
 batch_size = 128
-target_update_freq = 1000  # Less frequent updates
-num_total_episodes = 20000
+target_update_freq = 1500  # Less frequent updates
+num_total_episodes = 50000
 max_steps_per_episode = 3  # Fewer steps to focus learning
 images_per_cycle = 3  # Use same image for multiple episodes
 
 # Training strategy parameters
-warmup_episodes = 1000  # Episodes before starting serious learning
-eval_freq = 1000
+warmup_episodes = 2000  # Episodes before starting serious learning
+eval_freq = 2000
 eval_episodes = 200
-patience = 150
+patience = 250
 best_eval_reward = float('-inf')
 patience_counter = 0
 

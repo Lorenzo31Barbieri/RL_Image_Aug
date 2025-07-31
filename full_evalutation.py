@@ -9,14 +9,14 @@ Script definitivo per confrontare tutti i modelli di augmentation:
 - Test-Time Augmentation (TTA)
 - RL Agent (augmentation adattiva)
 
-Uso: python comprehensive_evaluation.py
+Uso: python full_evaluation.py
 
 AGGIORNAMENTO: Grafici migliorati con tutti i 4 metodi
 - Accuracy Comparison (tutti i 4 metodi)
-- Accuracy Improvement Comparison (escluso baseline)
-- Inference Time Comparison (tutti i 4 metodi)
-- Success Rate Comparison (escluso baseline)
-- Efficiency Plot (Improvement vs Time)
+- Transformation Usage Frequency
+- Confidence Comparison
+- Classification Outcome Changes (pie chart)
+- Inference Time Comparison
 - Summary & Recommendations
 """
 
@@ -203,12 +203,25 @@ class ComprehensiveEvaluator:
             return False
     
     def create_comprehensive_plots(self):
-        """Create comprehensive comparison plots with all 4 methods."""
+        """Create comprehensive comparison plots using the updated plotting system."""
         if not self.results:
             print("❌ No results available for plotting. Run evaluations first!")
             return
         
         print_section("Creating Comprehensive Plots")
+        
+        # Use the updated plotting system from comparison module
+        try:
+            self.comparison.create_plots()
+            print("✅ Comprehensive plots created successfully!")
+        except Exception as e:
+            print(f"❌ Error creating plots: {e}")
+            print("Falling back to basic plotting...")
+            self._create_basic_plots()
+    
+    def _create_basic_plots(self):
+        """Fallback basic plotting if the main plotting fails."""
+        print("📊 Creating basic comparison plots...")
         
         # Extract data for all methods
         methods_data = self._extract_plotting_data()
@@ -217,42 +230,32 @@ class ComprehensiveEvaluator:
             print("❌ No data available for plotting")
             return
         
-        # Create figure with 6 subplots (2x3)
-        fig = plt.figure(figsize=(18, 12))
-        fig.suptitle('Comprehensive Model Comparison', fontsize=16, fontweight='bold')
+        # Create simple comparison plot
+        fig, ax = plt.subplots(figsize=(12, 8))
         
-        # 1. Accuracy Comparison (all 4 methods)
-        ax1 = plt.subplot(2, 3, 1)
-        self._plot_accuracy_comparison(ax1, methods_data)
+        methods = list(methods_data.keys())
+        accuracies = [methods_data[m]['accuracy'] for m in methods]
+        colors = [methods_data[m]['color'] for m in methods]
         
-        # 2. Accuracy Improvement Comparison (excluding baseline)
-        ax2 = plt.subplot(2, 3, 2)
-        self._plot_accuracy_improvement(ax2, methods_data)
+        bars = ax.bar(methods, accuracies, color=colors, edgecolor='black', alpha=0.8)
         
-        # 3. Inference Time Comparison (all 4 methods)
-        ax3 = plt.subplot(2, 3, 3)
-        self._plot_inference_time(ax3, methods_data)
+        # Add values on bars
+        for bar, acc in zip(bars, accuracies):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.002,
+                    f'{acc:.3f}', ha='center', va='bottom', fontweight='bold')
         
-        # 4. Success Rate Comparison (excluding baseline)
-        ax4 = plt.subplot(2, 3, 4)
-        self._plot_success_rate(ax4, methods_data)
-        
-        # 5. Efficiency Plot (Improvement vs Time)
-        ax5 = plt.subplot(2, 3, 5)
-        self._plot_efficiency(ax5, methods_data)
-        
-        # 6. Summary Text
-        ax6 = plt.subplot(2, 3, 6)
-        self._plot_summary_text(ax6, methods_data)
+        ax.set_ylabel('Accuracy')
+        ax.set_title('Model Comparison - Accuracy', fontsize=14, fontweight='bold')
+        ax.grid(axis='y', alpha=0.3)
         
         plt.tight_layout()
         
         # Save the plot
-        plot_path = os.path.join(self.plots_dir, 'comprehensive_comparison.png')
+        plot_path = os.path.join(self.plots_dir, 'basic_comparison.png')
         plt.savefig(plot_path, dpi=300, bbox_inches='tight')
         plt.show()
         
-        print(f"✅ Comprehensive plot saved to: {plot_path}")
+        print(f"✅ Basic plot saved to: {plot_path}")
     
     def _extract_plotting_data(self):
         """Extract necessary data for plotting from all methods."""
@@ -299,208 +302,6 @@ class ComprehensiveEvaluator:
             }
         
         return data
-    
-    def _plot_accuracy_comparison(self, ax, data):
-        """Plot 1: Accuracy comparison of all methods."""
-        methods = list(data.keys())
-        accuracies = [data[m]['accuracy'] for m in methods]
-        colors = [data[m]['color'] for m in methods]
-        
-        bars = ax.bar(methods, accuracies, color=colors, edgecolor='black', alpha=0.8)
-        
-        # Add values on bars
-        for bar, acc in zip(bars, accuracies):
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.002,
-                    f'{acc:.3f}', ha='center', va='bottom', fontweight='bold', fontsize=10)
-        
-        ax.set_ylabel('Accuracy')
-        ax.set_title('Accuracy Comparison: All Methods', fontweight='bold', fontsize=12)
-        ax.set_ylim(0, max(accuracies) * 1.1 if accuracies else 1)
-        ax.grid(axis='y', alpha=0.3)
-        
-        # Rotate labels if needed
-        if len(methods) > 3:
-            plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
-    
-    def _plot_accuracy_improvement(self, ax, data):
-        """Plot 2: Accuracy improvement comparison (excluding baseline)."""
-        # Exclude baseline from improvement comparison
-        methods = [m for m in data.keys() if m != 'Baseline']
-        improvements = [data[m]['improvement'] for m in methods]
-        colors = [data[m]['color'] for m in methods]
-        
-        bars = ax.bar(methods, improvements, color=colors, edgecolor='black', alpha=0.8)
-        
-        # Add values on bars
-        for bar, imp in zip(bars, improvements):
-            y_pos = bar.get_height() + 0.001 if imp >= 0 else bar.get_height() - 0.001
-            va = 'bottom' if imp >= 0 else 'top'
-            ax.text(bar.get_x() + bar.get_width()/2, y_pos,
-                    f'{imp:+.4f}', ha='center', va=va, fontweight='bold', fontsize=10)
-        
-        ax.set_ylabel('Accuracy Improvement')
-        ax.set_title('Accuracy Improvement Comparison', fontweight='bold', fontsize=12)
-        ax.axhline(0, color='red', linestyle='--', alpha=0.7)
-        ax.grid(axis='y', alpha=0.3)
-        
-        # Rotate labels if needed
-        if len(methods) > 3:
-            plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
-    
-    def _plot_inference_time(self, ax, data):
-        """Plot 3: Inference time comparison of all methods."""
-        methods = list(data.keys())
-        times = [data[m]['time_ms'] for m in methods]
-        colors = [data[m]['color'] for m in methods]
-        
-        bars = ax.bar(methods, times, color=colors, edgecolor='black', alpha=0.8)
-        
-        # Add values on bars
-        for bar, time_val in zip(bars, times):
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(times)*0.02,
-                    f'{time_val:.1f}ms', ha='center', va='bottom', fontweight='bold', fontsize=10)
-        
-        ax.set_ylabel('Time per Sample (ms)')
-        ax.set_title('Inference Time Comparison', fontweight='bold', fontsize=12)
-        ax.set_ylim(0, max(times) * 1.2 if times else 1)
-        ax.grid(axis='y', alpha=0.3)
-        
-        # Rotate labels if needed
-        if len(methods) > 3:
-            plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
-    
-    def _plot_success_rate(self, ax, data):
-        """Plot 4: Success rate comparison (excluding baseline)."""
-        # Exclude baseline from success rate
-        methods = [m for m in data.keys() if m != 'Baseline']
-        success_rates = [data[m]['success_rate'] * 100 for m in methods]  # Convert to percentage
-        colors = [data[m]['color'] for m in methods]
-        
-        bars = ax.bar(methods, success_rates, color=colors, edgecolor='black', alpha=0.8)
-        
-        # Add values on bars
-        for bar, rate in zip(bars, success_rates):
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1,
-                    f'{rate:.1f}%', ha='center', va='bottom', fontweight='bold', fontsize=10)
-        
-        ax.set_ylabel('Success Rate (%)')
-        ax.set_title('Success Rate Comparison', fontweight='bold', fontsize=12)
-        ax.set_ylim(0, max(success_rates) * 1.2 if success_rates else 100)
-        ax.grid(axis='y', alpha=0.3)
-        
-        # Rotate labels if needed
-        if len(methods) > 3:
-            plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
-    
-    def _plot_efficiency(self, ax, data):
-        """Plot 5: Efficiency plot (Improvement vs Time)."""
-        # Exclude baseline
-        methods = [m for m in data.keys() if m != 'Baseline']
-        
-        if not methods:
-            ax.text(0.5, 0.5, 'No data for efficiency plot', ha='center', va='center', 
-                    transform=ax.transAxes, fontsize=12)
-            ax.set_title('Efficiency Plot: Improvement vs Time', fontweight='bold', fontsize=12)
-            return
-        
-        times = [data[m]['time_ms'] for m in methods]
-        improvements = [data[m]['improvement'] for m in methods]
-        colors = [data[m]['color'] for m in methods]
-        
-        # Calculate baseline time for slowdown
-        baseline_time = data.get('Baseline', {}).get('time_ms', min(times) if times else 1)
-        if baseline_time <= 0:
-            baseline_time = 1
-        
-        slowdowns = [t / baseline_time for t in times]
-        
-        scatter = ax.scatter(slowdowns, improvements, s=200, c=colors, alpha=0.8, edgecolors='black')
-        
-        # Add labels
-        for i, method in enumerate(methods):
-            ax.annotate(method, (slowdowns[i], improvements[i]), 
-                       xytext=(5, 5), textcoords='offset points', fontweight='bold', fontsize=9)
-        
-        ax.set_xlabel('Slowdown Factor (×)')
-        ax.set_ylabel('Accuracy Improvement')
-        ax.set_title('Efficiency Plot: Improvement vs Computational Cost', fontweight='bold', fontsize=12)
-        ax.grid(True, alpha=0.3)
-        ax.axhline(0, color='red', linestyle='--', alpha=0.5)
-        ax.axvline(1, color='red', linestyle='--', alpha=0.5, label='Baseline speed')
-    
-    def _plot_summary_text(self, ax, data):
-        """Plot 6: Summary text with recommendations."""
-        # Find best method
-        improvements = {m: data[m]['improvement'] for m in data.keys() if m != 'Baseline'}
-        
-        if improvements:
-            best_method = max(improvements.items(), key=lambda x: x[1])
-            best_name, best_improvement = best_method
-        else:
-            best_name, best_improvement = "None", 0
-        
-        # Calculate statistics
-        total_methods = len(data)
-        methods_with_improvement = len([m for m in improvements.values() if m > 0])
-        
-        # Create summary text
-        summary_text = f"""🎯 COMPREHENSIVE EVALUATION SUMMARY
-
-📊 Methods Evaluated: {total_methods}
-🏆 Best Method: {best_name}
-   Improvement: {best_improvement:+.4f}
-   Final Accuracy: {data.get(best_name, {}).get('accuracy', 0):.4f}
-
-📈 Performance Overview:
-"""
-        
-        # Add performance of each method
-        sorted_methods = sorted(data.items(), 
-                               key=lambda x: x[1]['improvement'], reverse=True)
-        
-        for i, (method, info) in enumerate(sorted_methods, 1):
-            if method == 'Baseline':
-                summary_text += f"   {i}. {method}: {info['accuracy']:.4f} (baseline)\n"
-            else:
-                summary_text += f"   {i}. {method}: {info['accuracy']:.4f} ({info['improvement']:+.4f})\n"
-        
-        # Add recommendations
-        summary_text += f"\n💡 Recommendations:\n"
-        
-        if best_improvement > 0.015:
-            summary_text += f"   ✅ {best_name}: Excellent improvement!\n"
-            summary_text += f"      Highly recommended for production use.\n"
-        elif best_improvement > 0.005:
-            summary_text += f"   ⚠️  {best_name}: Good improvement.\n"
-            summary_text += f"      Consider computational cost vs benefit.\n"
-        elif best_improvement > 0:
-            summary_text += f"   📊 {best_name}: Minimal improvement.\n"
-            summary_text += f"      Limited practical benefit.\n"
-        else:
-            summary_text += f"   ❌ No significant improvements found.\n"
-            summary_text += f"      Consider different approaches.\n"
-        
-        # Add efficiency info
-        if 'RL Agent' in data and data['RL Agent']['improvement'] > 0:
-            rl_time = data['RL Agent']['time_ms']
-            baseline_time = data.get('Baseline', {}).get('time_ms', 1)
-            slowdown = rl_time / baseline_time if baseline_time > 0 else 1
-            summary_text += f"\n⚡ RL Agent Efficiency:\n"
-            summary_text += f"   Speed: {slowdown:.1f}× slower than baseline\n"
-            
-            rl_loaded = self.results.get('rl', {}).get('model_loaded', False)
-            if not rl_loaded:
-                summary_text += f"   ⚠️  Using random weights - train for better results!\n"
-        
-        # Display the text
-        ax.text(0.05, 0.95, summary_text, transform=ax.transAxes, fontsize=10,
-                verticalalignment='top', fontfamily='monospace',
-                bbox=dict(boxstyle="round,pad=0.5", facecolor="lightgray", alpha=0.8))
-        
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.axis('off')
-        ax.set_title('Summary & Recommendations', fontweight='bold', fontsize=12)
     
     def print_results_summary(self):
         """Print detailed results summary."""
