@@ -11,12 +11,13 @@ Script definitivo per confrontare tutti i modelli di augmentation:
 
 Uso: python comprehensive_evaluation.py
 
-Il script è completamente autonomo e fornisce:
-- Risultati dettagliati per ogni metodo
-- Confronto comparativo automatico
-- Grafici di visualizzazione
-- Raccomandazioni finali
-- Salvataggio risultati
+AGGIORNAMENTO: Grafici migliorati con tutti i 4 metodi
+- Accuracy Comparison (tutti i 4 metodi)
+- Accuracy Improvement Comparison (escluso baseline)
+- Inference Time Comparison (tutti i 4 metodi)
+- Success Rate Comparison (escluso baseline)
+- Efficiency Plot (Improvement vs Time)
+- Summary & Recommendations
 """
 
 import os
@@ -24,6 +25,8 @@ import sys
 import torch
 import time
 import json
+import matplotlib.pyplot as plt
+import numpy as np
 from datetime import datetime
 from pathlib import Path
 
@@ -137,28 +140,386 @@ def check_requirements():
     print("\n✅ All requirements satisfied!")
     return True
 
-def load_evaluation_system():
-    """Load the evaluation system with error handling."""
-    print_section("Loading Evaluation System")
+
+class ComprehensiveEvaluator:
+    """Enhanced evaluator with improved plotting capabilities."""
     
-    try:
-        # Import evaluation modules
-        from evaluation.comparison import EvaluationComparison
-        print("✅ Evaluation system imported successfully")
-        
-        # Create comparison object
-        comparison = EvaluationComparison(CONFIG)
-        print("✅ Evaluation comparison object created")
-        
-        return comparison
+    def __init__(self, config):
+        self.config = config
+        self.results = {}
+        self.plots_dir = os.path.join(config['output_dir'], 'plots')
+        os.makedirs(self.plots_dir, exist_ok=True)
     
-    except ImportError as e:
-        print(f"❌ Failed to import evaluation system: {e}")
-        print("💡 Make sure the evaluation/ directory structure is correct")
-        return None
-    except Exception as e:
-        print(f"❌ Error initializing evaluation system: {e}")
-        return None
+    def load_evaluation_system(self):
+        """Load the evaluation system with error handling."""
+        print_section("Loading Evaluation System")
+        
+        try:
+            # Import evaluation modules
+            from evaluation.comparison import EvaluationComparison
+            print("✅ Evaluation system imported successfully")
+            
+            # Create comparison object
+            self.comparison = EvaluationComparison(self.config)
+            print("✅ Evaluation comparison object created")
+            
+            return True
+        
+        except ImportError as e:
+            print(f"❌ Failed to import evaluation system: {e}")
+            print("💡 Make sure the evaluation/ directory structure is correct")
+            return False
+        except Exception as e:
+            print(f"❌ Error initializing evaluation system: {e}")
+            return False
+    
+    def run_evaluations(self):
+        """Run all evaluations."""
+        try:
+            # Load models and data
+            print_section("Loading Models and Data")
+            
+            print("📥 Loading models...")
+            self.comparison.load_models()
+            
+            print("📊 Loading data...")
+            self.comparison.load_data()
+            
+            # Run all evaluations
+            print_section("Running Evaluations")
+            print("🔄 This may take several minutes...")
+            print(f"📊 Evaluating {self.config['tta_samples']} samples for TTA")
+            print(f"🤖 Evaluating {self.config['rl_episodes']} episodes for RL")
+            
+            self.comparison.run_all_evaluations()
+            
+            # Store results
+            self.results = self.comparison.results
+            
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error during evaluation: {e}")
+            return False
+    
+    def create_comprehensive_plots(self):
+        """Create comprehensive comparison plots with all 4 methods."""
+        if not self.results:
+            print("❌ No results available for plotting. Run evaluations first!")
+            return
+        
+        print_section("Creating Comprehensive Plots")
+        
+        # Extract data for all methods
+        methods_data = self._extract_plotting_data()
+        
+        if not methods_data:
+            print("❌ No data available for plotting")
+            return
+        
+        # Create figure with 6 subplots (2x3)
+        fig = plt.figure(figsize=(18, 12))
+        fig.suptitle('Comprehensive Model Comparison', fontsize=16, fontweight='bold')
+        
+        # 1. Accuracy Comparison (all 4 methods)
+        ax1 = plt.subplot(2, 3, 1)
+        self._plot_accuracy_comparison(ax1, methods_data)
+        
+        # 2. Accuracy Improvement Comparison (excluding baseline)
+        ax2 = plt.subplot(2, 3, 2)
+        self._plot_accuracy_improvement(ax2, methods_data)
+        
+        # 3. Inference Time Comparison (all 4 methods)
+        ax3 = plt.subplot(2, 3, 3)
+        self._plot_inference_time(ax3, methods_data)
+        
+        # 4. Success Rate Comparison (excluding baseline)
+        ax4 = plt.subplot(2, 3, 4)
+        self._plot_success_rate(ax4, methods_data)
+        
+        # 5. Efficiency Plot (Improvement vs Time)
+        ax5 = plt.subplot(2, 3, 5)
+        self._plot_efficiency(ax5, methods_data)
+        
+        # 6. Summary Text
+        ax6 = plt.subplot(2, 3, 6)
+        self._plot_summary_text(ax6, methods_data)
+        
+        plt.tight_layout()
+        
+        # Save the plot
+        plot_path = os.path.join(self.plots_dir, 'comprehensive_comparison.png')
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        plt.show()
+        
+        print(f"✅ Comprehensive plot saved to: {plot_path}")
+    
+    def _extract_plotting_data(self):
+        """Extract necessary data for plotting from all methods."""
+        data = {}
+        
+        # Baseline
+        if 'baseline' in self.results:
+            data['Baseline'] = {
+                'accuracy': self.results['baseline']['accuracy'],
+                'improvement': 0.0,
+                'time_ms': self.results['baseline'].get('time_per_sample', 0) * 1000,
+                'success_rate': 0.0,  # Baseline has no success rate
+                'color': 'lightblue'
+            }
+        
+        # Fixed Augmentation
+        if 'fixed_aug' in self.results:
+            data['Fixed Aug'] = {
+                'accuracy': self.results['fixed_aug']['augmented_accuracy'],
+                'improvement': self.results['fixed_aug']['accuracy_improvement'],
+                'time_ms': self.results['fixed_aug'].get('time_per_sample', 0) * 1000,
+                'success_rate': self.results['fixed_aug'].get('improvement_rate', 0),
+                'color': 'lightgreen'
+            }
+        
+        # TTA
+        if 'tta' in self.results:
+            data['TTA'] = {
+                'accuracy': self.results['tta']['tta_accuracy'],
+                'improvement': self.results['tta']['accuracy_improvement'],
+                'time_ms': self.results['tta'].get('time_per_sample', 0) * 1000,
+                'success_rate': self.results['tta'].get('improvement_rate', 0),
+                'color': 'lightcoral'
+            }
+        
+        # RL Agent
+        if 'rl' in self.results:
+            data['RL Agent'] = {
+                'accuracy': self.results['rl']['final_accuracy'],
+                'improvement': self.results['rl']['accuracy_improvement'],
+                'time_ms': self.results['rl'].get('time_per_sample', 0) * 1000,
+                'success_rate': self.results['rl'].get('improvement_rate', 0),
+                'color': 'gold'
+            }
+        
+        return data
+    
+    def _plot_accuracy_comparison(self, ax, data):
+        """Plot 1: Accuracy comparison of all methods."""
+        methods = list(data.keys())
+        accuracies = [data[m]['accuracy'] for m in methods]
+        colors = [data[m]['color'] for m in methods]
+        
+        bars = ax.bar(methods, accuracies, color=colors, edgecolor='black', alpha=0.8)
+        
+        # Add values on bars
+        for bar, acc in zip(bars, accuracies):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.002,
+                    f'{acc:.3f}', ha='center', va='bottom', fontweight='bold', fontsize=10)
+        
+        ax.set_ylabel('Accuracy')
+        ax.set_title('Accuracy Comparison: All Methods', fontweight='bold', fontsize=12)
+        ax.set_ylim(0, max(accuracies) * 1.1 if accuracies else 1)
+        ax.grid(axis='y', alpha=0.3)
+        
+        # Rotate labels if needed
+        if len(methods) > 3:
+            plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+    
+    def _plot_accuracy_improvement(self, ax, data):
+        """Plot 2: Accuracy improvement comparison (excluding baseline)."""
+        # Exclude baseline from improvement comparison
+        methods = [m for m in data.keys() if m != 'Baseline']
+        improvements = [data[m]['improvement'] for m in methods]
+        colors = [data[m]['color'] for m in methods]
+        
+        bars = ax.bar(methods, improvements, color=colors, edgecolor='black', alpha=0.8)
+        
+        # Add values on bars
+        for bar, imp in zip(bars, improvements):
+            y_pos = bar.get_height() + 0.001 if imp >= 0 else bar.get_height() - 0.001
+            va = 'bottom' if imp >= 0 else 'top'
+            ax.text(bar.get_x() + bar.get_width()/2, y_pos,
+                    f'{imp:+.4f}', ha='center', va=va, fontweight='bold', fontsize=10)
+        
+        ax.set_ylabel('Accuracy Improvement')
+        ax.set_title('Accuracy Improvement Comparison', fontweight='bold', fontsize=12)
+        ax.axhline(0, color='red', linestyle='--', alpha=0.7)
+        ax.grid(axis='y', alpha=0.3)
+        
+        # Rotate labels if needed
+        if len(methods) > 3:
+            plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+    
+    def _plot_inference_time(self, ax, data):
+        """Plot 3: Inference time comparison of all methods."""
+        methods = list(data.keys())
+        times = [data[m]['time_ms'] for m in methods]
+        colors = [data[m]['color'] for m in methods]
+        
+        bars = ax.bar(methods, times, color=colors, edgecolor='black', alpha=0.8)
+        
+        # Add values on bars
+        for bar, time_val in zip(bars, times):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(times)*0.02,
+                    f'{time_val:.1f}ms', ha='center', va='bottom', fontweight='bold', fontsize=10)
+        
+        ax.set_ylabel('Time per Sample (ms)')
+        ax.set_title('Inference Time Comparison', fontweight='bold', fontsize=12)
+        ax.set_ylim(0, max(times) * 1.2 if times else 1)
+        ax.grid(axis='y', alpha=0.3)
+        
+        # Rotate labels if needed
+        if len(methods) > 3:
+            plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+    
+    def _plot_success_rate(self, ax, data):
+        """Plot 4: Success rate comparison (excluding baseline)."""
+        # Exclude baseline from success rate
+        methods = [m for m in data.keys() if m != 'Baseline']
+        success_rates = [data[m]['success_rate'] * 100 for m in methods]  # Convert to percentage
+        colors = [data[m]['color'] for m in methods]
+        
+        bars = ax.bar(methods, success_rates, color=colors, edgecolor='black', alpha=0.8)
+        
+        # Add values on bars
+        for bar, rate in zip(bars, success_rates):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1,
+                    f'{rate:.1f}%', ha='center', va='bottom', fontweight='bold', fontsize=10)
+        
+        ax.set_ylabel('Success Rate (%)')
+        ax.set_title('Success Rate Comparison', fontweight='bold', fontsize=12)
+        ax.set_ylim(0, max(success_rates) * 1.2 if success_rates else 100)
+        ax.grid(axis='y', alpha=0.3)
+        
+        # Rotate labels if needed
+        if len(methods) > 3:
+            plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+    
+    def _plot_efficiency(self, ax, data):
+        """Plot 5: Efficiency plot (Improvement vs Time)."""
+        # Exclude baseline
+        methods = [m for m in data.keys() if m != 'Baseline']
+        
+        if not methods:
+            ax.text(0.5, 0.5, 'No data for efficiency plot', ha='center', va='center', 
+                    transform=ax.transAxes, fontsize=12)
+            ax.set_title('Efficiency Plot: Improvement vs Time', fontweight='bold', fontsize=12)
+            return
+        
+        times = [data[m]['time_ms'] for m in methods]
+        improvements = [data[m]['improvement'] for m in methods]
+        colors = [data[m]['color'] for m in methods]
+        
+        # Calculate baseline time for slowdown
+        baseline_time = data.get('Baseline', {}).get('time_ms', min(times) if times else 1)
+        if baseline_time <= 0:
+            baseline_time = 1
+        
+        slowdowns = [t / baseline_time for t in times]
+        
+        scatter = ax.scatter(slowdowns, improvements, s=200, c=colors, alpha=0.8, edgecolors='black')
+        
+        # Add labels
+        for i, method in enumerate(methods):
+            ax.annotate(method, (slowdowns[i], improvements[i]), 
+                       xytext=(5, 5), textcoords='offset points', fontweight='bold', fontsize=9)
+        
+        ax.set_xlabel('Slowdown Factor (×)')
+        ax.set_ylabel('Accuracy Improvement')
+        ax.set_title('Efficiency Plot: Improvement vs Computational Cost', fontweight='bold', fontsize=12)
+        ax.grid(True, alpha=0.3)
+        ax.axhline(0, color='red', linestyle='--', alpha=0.5)
+        ax.axvline(1, color='red', linestyle='--', alpha=0.5, label='Baseline speed')
+    
+    def _plot_summary_text(self, ax, data):
+        """Plot 6: Summary text with recommendations."""
+        # Find best method
+        improvements = {m: data[m]['improvement'] for m in data.keys() if m != 'Baseline'}
+        
+        if improvements:
+            best_method = max(improvements.items(), key=lambda x: x[1])
+            best_name, best_improvement = best_method
+        else:
+            best_name, best_improvement = "None", 0
+        
+        # Calculate statistics
+        total_methods = len(data)
+        methods_with_improvement = len([m for m in improvements.values() if m > 0])
+        
+        # Create summary text
+        summary_text = f"""🎯 COMPREHENSIVE EVALUATION SUMMARY
+
+📊 Methods Evaluated: {total_methods}
+🏆 Best Method: {best_name}
+   Improvement: {best_improvement:+.4f}
+   Final Accuracy: {data.get(best_name, {}).get('accuracy', 0):.4f}
+
+📈 Performance Overview:
+"""
+        
+        # Add performance of each method
+        sorted_methods = sorted(data.items(), 
+                               key=lambda x: x[1]['improvement'], reverse=True)
+        
+        for i, (method, info) in enumerate(sorted_methods, 1):
+            if method == 'Baseline':
+                summary_text += f"   {i}. {method}: {info['accuracy']:.4f} (baseline)\n"
+            else:
+                summary_text += f"   {i}. {method}: {info['accuracy']:.4f} ({info['improvement']:+.4f})\n"
+        
+        # Add recommendations
+        summary_text += f"\n💡 Recommendations:\n"
+        
+        if best_improvement > 0.015:
+            summary_text += f"   ✅ {best_name}: Excellent improvement!\n"
+            summary_text += f"      Highly recommended for production use.\n"
+        elif best_improvement > 0.005:
+            summary_text += f"   ⚠️  {best_name}: Good improvement.\n"
+            summary_text += f"      Consider computational cost vs benefit.\n"
+        elif best_improvement > 0:
+            summary_text += f"   📊 {best_name}: Minimal improvement.\n"
+            summary_text += f"      Limited practical benefit.\n"
+        else:
+            summary_text += f"   ❌ No significant improvements found.\n"
+            summary_text += f"      Consider different approaches.\n"
+        
+        # Add efficiency info
+        if 'RL Agent' in data and data['RL Agent']['improvement'] > 0:
+            rl_time = data['RL Agent']['time_ms']
+            baseline_time = data.get('Baseline', {}).get('time_ms', 1)
+            slowdown = rl_time / baseline_time if baseline_time > 0 else 1
+            summary_text += f"\n⚡ RL Agent Efficiency:\n"
+            summary_text += f"   Speed: {slowdown:.1f}× slower than baseline\n"
+            
+            rl_loaded = self.results.get('rl', {}).get('model_loaded', False)
+            if not rl_loaded:
+                summary_text += f"   ⚠️  Using random weights - train for better results!\n"
+        
+        # Display the text
+        ax.text(0.05, 0.95, summary_text, transform=ax.transAxes, fontsize=10,
+                verticalalignment='top', fontfamily='monospace',
+                bbox=dict(boxstyle="round,pad=0.5", facecolor="lightgray", alpha=0.8))
+        
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.axis('off')
+        ax.set_title('Summary & Recommendations', fontweight='bold', fontsize=12)
+    
+    def print_results_summary(self):
+        """Print detailed results summary."""
+        if not self.results:
+            return
+        
+        print_section("Results Summary")
+        self.comparison.print_comparison_summary()
+    
+    def save_results(self):
+        """Save results to files."""
+        if not self.results or not CONFIG['save_results']:
+            return
+        
+        # Use the existing save functionality
+        self.comparison.save_results()
+        
+        print(f"💾 Results saved to: {CONFIG['output_dir']}/")
+
 
 def run_comprehensive_evaluation():
     """Run the complete evaluation process."""
@@ -169,39 +530,30 @@ def run_comprehensive_evaluation():
         print("\n❌ Requirements check failed. Please fix the issues above.")
         return None
     
+    # Create evaluator
+    evaluator = ComprehensiveEvaluator(CONFIG)
+    
     # Load evaluation system
-    comparison = load_evaluation_system()
-    if comparison is None:
+    if not evaluator.load_evaluation_system():
         print("\n❌ Failed to load evaluation system.")
         return None
     
     try:
-        # Load models and data
-        print_section("Loading Models and Data")
-        
-        print("📥 Loading models...")
-        comparison.load_models()
-        
-        print("📊 Loading data...")
-        comparison.load_data()
-        
-        # Run all evaluations
-        print_section("Running Evaluations")
-        print("🔄 This may take several minutes...")
-        print(f"📊 Evaluating {CONFIG['tta_samples']} samples for TTA")
-        print(f"🤖 Evaluating {CONFIG['rl_episodes']} episodes for RL")
-        
-        comparison.run_all_evaluations()
+        # Run evaluations
+        if not evaluator.run_evaluations():
+            print("\n❌ Evaluation failed.")
+            return None
         
         # Print results
-        print_section("Results Summary")
-        comparison.print_comparison_summary()
+        evaluator.print_results_summary()
         
         # Create visualizations
         if CONFIG['create_plots']:
-            print_section("Creating Visualizations")
-            comparison.create_plots()
-            print(f"📊 Plots saved to: {CONFIG['output_dir']}/plots/")
+            evaluator.create_comprehensive_plots()
+        
+        # Save results
+        if CONFIG['save_results']:
+            evaluator.save_results()
         
         # Calculate total time
         total_time = time.time() - start_time
@@ -210,8 +562,9 @@ def run_comprehensive_evaluation():
         print(f"🎉 All evaluations completed successfully!")
         print(f"⏱️  Total time: {total_time/60:.1f} minutes")
         print(f"📁 Results saved to: {CONFIG['output_dir']}/")
+        print(f"📊 Plots saved to: {CONFIG['output_dir']}/plots/")
         
-        return comparison.results
+        return evaluator.results
         
     except KeyboardInterrupt:
         print("\n\n⏹️  Evaluation interrupted by user")
@@ -236,6 +589,7 @@ def run_comprehensive_evaluation():
         import traceback
         traceback.print_exc()
         return None
+
 
 def print_final_summary(results):
     """Print a final summary of all results."""
@@ -298,122 +652,7 @@ def print_final_summary(results):
     for i, (method, acc, imp, time_ms) in enumerate(ranked, 1):
         time_str = f"{time_ms*1000:.1f}ms" if time_ms > 0 else "N/A"
         print(f"   {i}. {method:12} | Acc: {acc:.4f} | Imp: {imp:+.4f} | Time: {time_str}")
-    
-    print(f"\n💡 RECOMMENDATIONS:")
-    
-    # Decision logic
-    if best_improvement > 0.015:  # >1.5% improvement
-        print(f"   ✅ {best_method} shows significant improvement - Highly recommended!")
-    elif best_improvement > 0.005:  # >0.5% improvement
-        print(f"   ⚠️  {best_method} shows moderate improvement - Consider the computational cost")
-    elif best_improvement > 0:
-        print(f"   📊 {best_method} shows minimal improvement - Limited practical benefit")
-    else:
-        print(f"   ❌ No method shows meaningful improvement - Consider:")
-        print(f"      • Retraining the RL agent with different parameters")
-        print(f"      • Using a different set of augmentations")
-        print(f"      • The baseline classifier might already be well-optimized")
-    
-    # Specific recommendations
-    print(f"\n🎯 SPECIFIC RECOMMENDATIONS:")
-    
-    if 'rl' in [r[0] for r in ranked[:2]]:  # RL in top 2
-        rl_loaded = results.get('rl', {}).get('model_loaded', False)
-        if rl_loaded:
-            print("   • RL Agent: Good performance, continue using this approach")
-        else:
-            print("   • RL Agent: Good performance even with random weights - train a real agent!")
-    
-    if 'TTA' in [r[0] for r in ranked[:2]]:  # TTA in top 2
-        tta_time = next((t for m, a, i, t in ranked if m == 'TTA'), 0)
-        if tta_time > 0.01:  # >10ms
-            print("   • TTA: Good accuracy but slow - use only when inference time is not critical")
-        else:
-            print("   • TTA: Good balance of accuracy and speed")
-    
-    if 'Fixed Aug' in [r[0] for r in ranked[:2]]:
-        print("   • Fixed Augmentation: Simple and effective - good baseline to beat")
-    
-    print(f"\n⚡ EFFICIENCY ANALYSIS:")
-    if times and max(times) > 0:
-        baseline_time = times[0] if methods[0] == 'Baseline' else min(times)
-        for method, acc, imp, time_ms in ranked:
-            if time_ms > 0 and baseline_time > 0:
-                slowdown = time_ms / baseline_time
-                efficiency = imp / (slowdown - 1) if slowdown > 1 else float('inf')
-                if efficiency > 0.01:
-                    rating = "🟢 Highly Efficient"
-                elif efficiency > 0.005:
-                    rating = "🟡 Moderately Efficient"
-                elif efficiency > 0:
-                    rating = "🟠 Low Efficiency"
-                else:
-                    rating = "🔴 Inefficient"
-                print(f"   {method:12}: {slowdown:.1f}x slower | {rating}")
 
-def save_results_summary(results):
-    """Save a summary of results to JSON file."""
-    if not results or not CONFIG['save_results']:
-        return
-    
-    summary = {
-        'timestamp': datetime.now().isoformat(),
-        'config': CONFIG,
-        'results_summary': {},
-        'evaluation_info': {
-            'python_version': sys.version,
-            'pytorch_version': torch.__version__,
-            'cuda_available': torch.cuda.is_available(),
-            'device_name': torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'
-        }
-    }
-    
-    # Extract key metrics for each method
-    for method, result in results.items():
-        method_summary = {}
-        
-        if method == 'baseline':
-            method_summary = {
-                'accuracy': result.get('accuracy', 0),
-                'avg_confidence': result.get('avg_confidence', 0),
-                'time_per_sample': result.get('time_per_sample', 0)
-            }
-        elif method == 'fixed_aug':
-            method_summary = {
-                'baseline_accuracy': result.get('baseline_accuracy', 0),
-                'augmented_accuracy': result.get('augmented_accuracy', 0),
-                'accuracy_improvement': result.get('accuracy_improvement', 0),
-                'time_per_sample': result.get('time_per_sample', 0)
-            }
-        elif method == 'tta':
-            method_summary = {
-                'baseline_accuracy': result.get('baseline_accuracy', 0),
-                'tta_accuracy': result.get('tta_accuracy', 0),
-                'accuracy_improvement': result.get('accuracy_improvement', 0),
-                'num_augmentations': result.get('num_augmentations', 0),
-                'time_per_sample': result.get('time_per_sample', 0)
-            }
-        elif method == 'rl':
-            method_summary = {
-                'initial_accuracy': result.get('initial_accuracy', 0),
-                'final_accuracy': result.get('final_accuracy', 0),
-                'accuracy_improvement': result.get('accuracy_improvement', 0),
-                'avg_reward': result.get('avg_reward', 0),
-                'improvement_rate': result.get('improvement_rate', 0),
-                'model_loaded': result.get('model_loaded', False),
-                'time_per_sample': result.get('time_per_sample', 0)
-            }
-        
-        summary['results_summary'][method] = method_summary
-    
-    # Save to file
-    summary_file = os.path.join(CONFIG['output_dir'], 'comprehensive_summary.json')
-    try:
-        with open(summary_file, 'w') as f:
-            json.dump(summary, f, indent=2)
-        print(f"💾 Summary saved to: {summary_file}")
-    except Exception as e:
-        print(f"⚠️  Could not save summary: {e}")
 
 def main():
     """Main execution function."""
@@ -447,20 +686,18 @@ def main():
     
     if results:
         print_final_summary(results)
-        save_results_summary(results)
         
         print_section("Evaluation Completed Successfully")
         print("🎉 All done! Check the results above and in the output directory.")
         print(f"📁 Detailed results: {CONFIG['output_dir']}/")
-        
-        if CONFIG['create_plots']:
-            print(f"📊 Visualizations: {CONFIG['output_dir']}/plots/")
+        print(f"📊 Comprehensive plots: {CONFIG['output_dir']}/plots/comprehensive_comparison.png")
         
     else:
         print_section("Evaluation Failed")
         print("❌ The evaluation did not complete successfully.")
         print("💡 Check the error messages above for guidance.")
         print("🔄 You can run this script again after fixing any issues.")
+
 
 if __name__ == '__main__':
     try:
