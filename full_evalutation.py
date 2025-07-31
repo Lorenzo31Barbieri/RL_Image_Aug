@@ -208,14 +208,44 @@ class ComprehensiveEvaluator:
             print("❌ No results available for plotting. Run evaluations first!")
             return
         
-        print_section("Creating Comprehensive Plots")
+        print_section("Creating Comprehensive Analysis")
+        print("📊 Generating comparison plots...")
+        print("🧠 Creating confusion matrix analysis...")  
+        print("🏷️ Analyzing class-wise improvements...")
+        print("💾 Saving improved image examples...")
         
         # Use the updated plotting system from comparison module
         try:
             self.comparison.create_plots()
-            print("✅ Comprehensive plots created successfully!")
+            print("✅ Comprehensive analysis completed successfully!")
+            
+            # Print summary of what was created
+            plots_created = []
+            plots_dir = os.path.join(self.config['output_dir'], 'plots')
+            
+            expected_plots = [
+                'comprehensive_comparison.png',
+                'confusion_matrices.png', 
+                'rl_class_analysis.png'
+            ]
+            
+            for plot_name in expected_plots:
+                plot_path = os.path.join(plots_dir, plot_name)
+                if os.path.exists(plot_path):
+                    plots_created.append(plot_name)
+            
+            if plots_created:
+                print(f"📊 Created plots: {', '.join(plots_created)}")
+            
+            # Check for improved images
+            images_dir = os.path.join(self.config['output_dir'], 'improved_images')
+            if os.path.exists(images_dir):
+                image_files = [f for f in os.listdir(images_dir) if f.endswith('.png')]
+                if image_files:
+                    print(f"🖼️ Saved {len(image_files)} improved image examples")
+            
         except Exception as e:
-            print(f"❌ Error creating plots: {e}")
+            print(f"❌ Error creating comprehensive analysis: {e}")
             print("Falling back to basic plotting...")
             self._create_basic_plots()
     
@@ -363,8 +393,11 @@ def run_comprehensive_evaluation():
         print(f"🎉 All evaluations completed successfully!")
         print(f"⏱️  Total time: {total_time/60:.1f} minutes")
         print(f"📁 Results saved to: {CONFIG['output_dir']}/")
-        print(f"📊 Plots saved to: {CONFIG['output_dir']}/plots/")
-        
+        print(f"📊 Main plots: {CONFIG['output_dir']}/plots/comprehensive_comparison.png")
+        print(f"🧠 Confusion matrices: {CONFIG['output_dir']}/plots/confusion_matrices.png")
+        print(f"🏷️ Class analysis: {CONFIG['output_dir']}/plots/rl_class_analysis.png")
+        print(f"🖼️ Improved images: {CONFIG['output_dir']}/improved_images/")
+        #evaluator.comparison.create_test_improved_images() #create test images with augs
         return evaluator.results
         
     except KeyboardInterrupt:
@@ -484,6 +517,7 @@ def main():
     
     # Run evaluation
     results = run_comprehensive_evaluation()
+    
     
     if results:
         print_final_summary(results)

@@ -709,6 +709,383 @@ def run_rl_agent_evaluation(classifier_path: str = './checkpoint/ckpt.pth',
     results['model_loaded'] = model_loaded
     return results
 
+def evaluate_rl_agent_detailed(agent,
+                               classifier_model: torch.nn.Module,
+                               test_dataset: torch.utils.data.Dataset,
+                               device: torch.device,
+                               num_episodes: int = 1000,
+                               max_steps_per_episode: int = 3,
+                               verbose: bool = True,
+                               save_examples: bool = True) -> Dict[str, Any]:
+    """
+    Valuta l'agente RL con tracking dettagliato per analisi avanzate.
+    
+    Args:
+        agent: Agente RL pre-trained
+        classifier_model: Modello classificatore
+        test_dataset: Dataset di test
+        device: Device di computazione
+        num_episodes: Numero di episodi da valutare
+        max_steps_per_episode: Passi massimi per episodio
+        verbose: Se stampare informazioni dettagliate
+        save_examples: Se salvare esempi di miglioramenti
+    
+    Returns:
+        Dict con risultati dettagliati inclusi dati per classe e esempi
+    """
+    if not RL_MODULES_AVAILABLE:
+        raise ImportError("RL modules not available. Cannot evaluate RL agent.")
+    
+    validate_evaluation_inputs(classifier_model, device=device)
+    
+    if num_episodes > len(test_dataset):
+        num_episodes = len(test_dataset)
+        if verbose:
+            print(f"⚠️ Adjusted num_episodes to dataset size: {num_episodes}")
+    
+    if verbose:
+        print(f"🤖 Starting detailed RL agent evaluation...")
+        print(f"📊 Dataset size: {len(test_dataset)} samples")
+        print(f"🎮 Episodes: {num_episodes}")
+        print(f"🎯 Max steps per episode: {max_steps_per_episode}")
+        print(f"💾 Save examples: {save_examples}")
+    
+    # Disabilita esplorazione per valutazione
+    original_epsilon = getattr(agent, 'epsilon', 0)
+    agent.epsilon = 0
+    
+    with time_evaluation_context("DETAILED RL AGENT"):
+        # Seleziona episodi casuali
+        indices = np.random.choice(len(test_dataset), num_episodes, replace=False)
+        
+        # Esegui valutazione dettagliata
+        results = _evaluate_rl_episodes_detailed(
+            agent=agent,
+            classifier_model=classifier_model,
+            test_dataset=test_dataset,
+            indices=indices,
+            device=device,
+            max_steps_per_episode=max_steps_per_episode,
+            verbose=verbose,
+            save_examples=save_examples
+        )
+        
+        # Aggiungi metadati
+        results.update({
+            'method': 'rl_agent_detailed',
+            'num_episodes_evaluated': num_episodes,
+            'max_steps_per_episode': max_steps_per_episode,
+            'dataset_size': len(test_dataset),
+            'agent_epsilon': 0,
+            'original_epsilon': original_epsilon
+        })
+        
+        if verbose:
+            _print_detailed_rl_summary(results)
+    
+    # Ripristina epsilon originale
+    agent.epsilon = original_epsilon
+    
+    return results
+
+def _evaluate_rl_episodes_detailed(agent,
+                                  classifier_model: torch.nn.Module,
+                                  test_dataset: torch.utils.data.Dataset,
+                                  indices: np.ndarray,
+                                  device: torch.device,
+                                  max_steps_per_episode: int,
+                                  verbose: bool,
+                                  save_examples: bool) -> Dict[str, Any]:
+    """Esegue valutazione RL dettagliata con tracking per classe."""
+    
+    # Metriche di performance standard
+    initial_correct = []
+    final_correct = []
+    initial_confidences = []
+    final_confidences = []
+    episode_rewards = []
+    action_sequences = []
+    action_counts = defaultdict(int)
+    
+    # Tracking dettagliato per classe
+    improvements_by_class = defaultdict(int)
+    degradations_by_class = defaultdict(int)
+    class_episode_data = []
+    
+    # Per confusion matrix
+    initial_predictions = []
+    final_predictions = []
+    true_labels = []
+    
+    # Esempi di miglioramenti
+    improvement_examples = []
+    
+    improvements = 0
+    degradations = 0
+    
+    start_time = time.time()
+    
+    progress_desc = "Detailed RL episodes"
+    
+    for episode_idx, idx in enumerate(tqdm(indices, desc=progress_desc, disable=not verbose)):
+        image, true_label = test_dataset[idx]
+        
+        # Inizializza environment
+        env = ImageAugmentationEnv(
+            classifier=classifier_model,
+            max_steps=max_steps_per_episode,
+            device=device
+        )
+        
+        # Reset environment con l'immagine corrente
+        state = env.reset(image, true_label)
+        
+        # Registra stato iniziale
+        initial_is_correct = env.initial_correct
+        initial_confidence = env.initial_confidence
+        initial_prediction = env.initial_prediction
+        
+        initial_correct.append(initial_is_correct)
+        initial_confidences.append(initial_confidence)
+        initial_predictions.append(initial_prediction)
+        true_labels.append(true_label)
+        
+        # Esegui episodio RL
+        episode_reward = 0
+        done = False
+        actions_taken = []
+        augmented_image = image.clone()
+        
+        while not done:
+            # Seleziona azione (senza esplorazione)
+            action = agent.select_action(state, training=False)
+            
+            # Esegui azione nell'environment
+            next_state, reward, done, info = env.step(action)
+            
+            # Registra azione e reward
+            actions_taken.append(action)
+            action_counts[get_action_name(action)] += 1
+            episode_reward += reward
+            
+            state = next_state
+        
+        # Ottieni metriche finali dall'environment
+        metrics = env.get_improvement_metrics()
+        final_is_correct = metrics['final_correct']
+        final_confidence = metrics['final_confidence']
+        final_prediction = metrics.get('final_prediction', initial_prediction)
+        
+        # Registra risultati finali
+        final_correct.append(final_is_correct)
+        final_confidences.append(final_confidence)
+        final_predictions.append(final_prediction)
+        episode_rewards.append(episode_reward)
+        action_sequences.append(actions_taken)
+        
+        # Tracking per classe
+        episode_data = {
+            'episode_idx': episode_idx,
+            'image_idx': idx,
+            'true_label': true_label,
+            'initial_correct': initial_is_correct,
+            'final_correct': final_is_correct,
+            'initial_prediction': initial_prediction,
+            'final_prediction': final_prediction,
+            'initial_confidence': initial_confidence,
+            'final_confidence': final_confidence,
+            'actions': actions_taken,
+            'reward': episode_reward
+        }
+        class_episode_data.append(episode_data)
+        
+        # Conta miglioramenti/peggioramenti per classe
+        if not initial_is_correct and final_is_correct:
+            improvements += 1
+            improvements_by_class[true_label] += 1
+            
+            # Salva esempio di miglioramento se richiesto
+            if save_examples and len(improvement_examples) < 10:
+                # Ottieni l'immagine finale augmentata dall'environment
+                final_image = getattr(env, 'current_image', image)
+                improvement_examples.append({
+                    'original_image': image.clone(),
+                    'augmented_image': final_image.clone(),
+                    'true_label': true_label,
+                    'initial_prediction': initial_prediction,
+                    'final_prediction': final_prediction,
+                    'actions': actions_taken.copy(),
+                    'confidence_improvement': final_confidence - initial_confidence
+                })
+                
+        elif initial_is_correct and not final_is_correct:
+            degradations += 1
+            degradations_by_class[true_label] += 1
+    
+    total_time = time.time() - start_time
+    num_episodes = len(indices)
+    
+    # Calcola metriche aggregate standard
+    initial_accuracy = sum(initial_correct) / num_episodes
+    final_accuracy = sum(final_correct) / num_episodes
+    accuracy_improvement = final_accuracy - initial_accuracy
+    
+    confidence_improvements = [final - initial for final, initial in zip(final_confidences, initial_confidences)]
+    avg_confidence_improvement = np.mean(confidence_improvements)
+    
+    avg_reward = np.mean(episode_rewards)
+    avg_sequence_length = np.mean([len(seq) for seq in action_sequences])
+    
+    # Calcola confusion matrix
+    from sklearn.metrics import confusion_matrix
+    initial_cm = confusion_matrix(true_labels, initial_predictions, labels=list(range(10)))
+    final_cm = confusion_matrix(true_labels, final_predictions, labels=list(range(10)))
+    
+    return {
+        # Metriche standard
+        'initial_accuracy': initial_accuracy,
+        'final_accuracy': final_accuracy,
+        'accuracy_improvement': accuracy_improvement,
+        'initial_avg_confidence': np.mean(initial_confidences),
+        'final_avg_confidence': np.mean(final_confidences),
+        'avg_confidence_improvement': avg_confidence_improvement,
+        'avg_reward': avg_reward,
+        'reward_std': np.std(episode_rewards),
+        'improvements': improvements,
+        'degradations': degradations,
+        'improvement_rate': improvements / num_episodes,
+        'degradation_rate': degradations / num_episodes,
+        'net_improvement_rate': (improvements - degradations) / num_episodes,
+        'avg_sequence_length': avg_sequence_length,
+        'action_counts': dict(action_counts),
+        'episode_rewards': episode_rewards,
+        'confidence_improvements': confidence_improvements,
+        'action_sequences': action_sequences,
+        'inference_time': total_time,
+        'time_per_sample': total_time / num_episodes,
+        
+        # Dati dettagliati per analisi avanzate
+        'improvements_by_class': dict(improvements_by_class),
+        'degradations_by_class': dict(degradations_by_class),
+        'class_episode_data': class_episode_data,
+        'improvement_examples': improvement_examples,
+        
+        # Per confusion matrix
+        'predictions': final_predictions,
+        'labels': true_labels,
+        'initial_predictions': initial_predictions,
+        'initial_confusion_matrix': initial_cm,
+        'final_confusion_matrix': final_cm
+    }
+
+def _print_detailed_rl_summary(results: Dict[str, Any]) -> None:
+    """Stampa riassunto dettagliato con analisi per classe."""
+    
+    print(f"\n{'='*70}")
+    print("DETAILED RL AGENT EVALUATION RESULTS")
+    print(f"{'='*70}")
+    
+    print(f"🎮 EPISODES: {results['num_episodes_evaluated']}")
+    print(f"🎯 Max steps per episode: {results['max_steps_per_episode']}")
+    print(f"🔄 Average sequence length: {results['avg_sequence_length']:.1f}")
+    
+    print(f"\n📈 ACCURACY COMPARISON:")
+    print(f"  Initial: {results['initial_accuracy']:.4f}")
+    print(f"  Final: {results['final_accuracy']:.4f}")
+    
+    improvement_sign = "📈" if results['accuracy_improvement'] > 0 else "📉" if results['accuracy_improvement'] < 0 else "➡️"
+    print(f"  {improvement_sign} Improvement: {results['accuracy_improvement']:+.4f}")
+    
+    print(f"\n📊 IMPROVEMENT BREAKDOWN:")
+    print(f"  Improved episodes: {results['improvements']} ({results['improvement_rate']:.1%})")
+    print(f"  Degraded episodes: {results['degradations']} ({results['degradation_rate']:.1%})")
+    print(f"  Net success rate: {results['net_improvement_rate']:+.1%}")
+    
+    # Analisi per classe
+    print(f"\n🏷️  CLASS-WISE IMPROVEMENTS:")
+    class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer',
+                   'dog', 'frog', 'horse', 'ship', 'truck']
+    
+    improvements_by_class = results['improvements_by_class']
+    degradations_by_class = results['degradations_by_class']
+    
+    print(f"  {'Class':<12} {'Improved':<8} {'Degraded':<8} {'Net':<6}")
+    print(f"  {'-'*35}")
+    
+    for class_id in range(10):
+        imp = improvements_by_class.get(class_id, 0)
+        deg = degradations_by_class.get(class_id, 0)
+        net = imp - deg
+        class_name = class_names[class_id]
+        print(f"  {class_name:<12} {imp:<8} {deg:<8} {net:<6}")
+    
+    # Esempi di miglioramento
+    improvement_examples = results.get('improvement_examples', [])
+    if improvement_examples:
+        print(f"\n💡 IMPROVEMENT EXAMPLES: {len(improvement_examples)} saved")
+        for i, example in enumerate(improvement_examples[:3]):  # Mostra primi 3
+            class_name = class_names[example['true_label']]
+            conf_imp = example['confidence_improvement']
+            actions = [get_action_name(a) for a in example['actions']]
+            print(f"  {i+1}. {class_name}: +{conf_imp:.3f} confidence via {actions}")
+    
+    print(f"\n⚡ PERFORMANCE:")
+    print(f"  Total time: {results['inference_time']:.2f}s")
+    print(f"  Time per episode: {results['time_per_sample']*1000:.1f}ms")
+    
+    print(f"{'='*70}")
+
+# Modifica la funzione wrapper per usare la valutazione dettagliata
+def run_rl_agent_evaluation_detailed(classifier_path: str = './checkpoint/ckpt.pth',
+                                    rl_model_path: str = './models/best_improved_dqn_model.pth',
+                                    data_root: str = './data',
+                                    num_episodes: int = 1000,
+                                    max_steps_per_episode: int = 3,
+                                    state_dim: int = 15,
+                                    device: torch.device = None,
+                                    save_examples: bool = True) -> Dict[str, Any]:
+    """
+    Funzione wrapper per eseguire valutazione RL dettagliata.
+    """
+    if not RL_MODULES_AVAILABLE:
+        raise ImportError("RL modules not available. Cannot run RL evaluation.")
+    
+    from evaluation.core.model_loader import load_classifier, load_rl_agent
+    from evaluation.core.data_utils import get_cifar10_test_dataset
+    
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    print(f"🚀 Running detailed RL agent evaluation...")
+    print(f"📁 Classifier: {classifier_path}")
+    print(f"📁 RL model: {rl_model_path}")
+    print(f"🎮 Episodes: {num_episodes}")
+    
+    # Carica modelli
+    classifier = load_classifier(classifier_path, device)
+    agent, model_loaded = load_rl_agent(rl_model_path, state_dim=state_dim, device=device)
+    
+    if not model_loaded:
+        print("⚠️ Warning: Using randomly initialized RL agent")
+    
+    # Carica dataset
+    test_dataset = get_cifar10_test_dataset(data_root=data_root)
+    
+    # Esegui valutazione dettagliata
+    results = evaluate_rl_agent_detailed(
+        agent=agent,
+        classifier_model=classifier,
+        test_dataset=test_dataset,
+        device=device,
+        num_episodes=num_episodes,
+        max_steps_per_episode=max_steps_per_episode,
+        verbose=True,
+        save_examples=save_examples
+    )
+    
+    results['model_loaded'] = model_loaded
+    return results
+
 
 if __name__ == '__main__':
     """
