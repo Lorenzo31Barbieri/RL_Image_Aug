@@ -3,11 +3,10 @@ output
 venv
 old
 models
-plots
+training_plots
 data
 tta_plots
 comparison_plots
 quick_test_results
-comprehensive_results
 evaluation_plots
 models_and_plots_backup

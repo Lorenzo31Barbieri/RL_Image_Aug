@@ -1,0 +1,53 @@
+{
+    "timestamp": "2025-08-03T17:21:25.235590",
+    "config": {
+        "classifier_path": "./checkpoint/ckpt.pth",
+        "rl_model_path": "./models/best_improved_dqn_model.pth",
+        "data_root": "./data",
+        "batch_size": 64,
+        "tta_samples": 1000,
+        "rl_episodes": 1000,
+        "max_steps_per_episode": 3,
+        "state_dim": 15,
+        "fixed_aug_ids": [
+            0,
+            3,
+            6
+        ],
+        "output_dir": "./comprehensive_results",
+        "save_results": true,
+        "create_plots": true,
+        "evaluate_baseline": true,
+        "evaluate_fixed_aug": true,
+        "evaluate_tta": true,
+        "evaluate_rl": true
+    },
+    "device": "cuda",
+    "methods_evaluated": [
+        "baseline",
+        "fixed_aug",
+        "tta",
+        "rl"
+    ],
+    "baseline_accuracy": 0.8028,
+    "accuracy_comparison": {
+        "baseline": 0.8028,
+        "fixed_aug": 0.7671,
+        "tta": 0.814,
+        "rl": 0.865
+    },
+    "improvement_comparison": {
+        "baseline": 0.0,
+        "fixed_aug": -0.035699999999999954,
+        "tta": 0.0129999999999999,
+        "rl": 0.07899999999999996
+    },
+    "best_method": "rl",
+    "best_improvement": 0.07899999999999996,
+    "time_comparison": {
+        "baseline": 0.40149998664855957,
+        "fixed_aug": 0.580449914932251,
+        "tta": 17.706000804901123,
+        "rl": 34.04599976539612
+    }
+}
