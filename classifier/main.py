@@ -14,6 +14,7 @@ import argparse
 # Assuming 'models' is a directory in the same path containing model definitions
 # e.g., models/VGG.py, models/ResNet.py etc.
 from models import *
+from src.models.vgg import VGG
 from src.utils.utils import progress_bar
 
 

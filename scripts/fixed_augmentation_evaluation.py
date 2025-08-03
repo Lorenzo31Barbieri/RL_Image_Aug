@@ -3,7 +3,7 @@
 import torch
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
-from torchvision import src.environment.transforms as transforms
+from torchvision import transforms
 from torch.utils.data import DataLoader
 import torchvision # Per CIFAR10 dataset
 from src.models.vgg import VGG
