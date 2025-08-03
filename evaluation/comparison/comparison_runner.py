@@ -1036,10 +1036,18 @@ class EvaluationComparison:
             
             # Calcola accuratezza per classe
             class_accuracies = cm.diagonal() / cm.sum(axis=1)
-            avg_accuracy = np.mean(class_accuracies)
+
+            #Usa macro-average accuracy (come nella valutazione)
+            # avg_accuracy = np.mean(class_accuracies)
+            # ax.set_title(f'{method_name.title().replace("_", " ")}\nAccuracy: {avg_accuracy:.3f}', 
+            #             fontweight='bold')
             
-            ax.set_title(f'{method_name.title().replace("_", " ")}\nAccuracy: {avg_accuracy:.3f}', 
+            #Usa overall accuracy (come nella valutazione)
+            overall_accuracy = cm.diagonal().sum() / cm.sum()  # Totale corretti / Totale campioni
+
+            ax.set_title(f'{method_name.title().replace("_", " ")}\nAccuracy: {overall_accuracy:.3f}', 
                         fontweight='bold')
+            
             ax.set_xlabel('Predicted')
             ax.set_ylabel('True')
             
