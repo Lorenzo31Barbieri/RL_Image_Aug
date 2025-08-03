@@ -208,33 +208,13 @@ class EvaluationComparison:
             print("⏭️ Skipping RL evaluation")
             return
         
-        print(f"\n🤖 Running detailed RL agent evaluation...")
+        print(f"\n🤖 Running RL agent evaluation...")
         
         num_episodes = self.config.get('rl_episodes', 1000)
         
-        # Usa la valutazione dettagliata invece di quella standard
         try:
-            from evaluation.methods.evaluate_rl_agent import evaluate_rl_agent_detailed
-            
-            self.results['rl'] = evaluate_rl_agent_detailed(
-                agent=self.agent,
-                classifier_model=self.classifier,
-                test_dataset=self.test_dataset,
-                device=self.device,
-                num_episodes=num_episodes,
-                max_steps_per_episode=self.config.get('max_steps_per_episode', 3),
-                verbose=True,
-                save_examples=True
-            )
-            
-            self.results['rl']['model_loaded'] = self.rl_model_loaded
-            print(f"✅ Detailed RL evaluation completed")
-            
-        except ImportError:
-            # Fallback alla valutazione standard se quella dettagliata non è disponibile
-            print("⚠️ Detailed RL evaluation not available, using standard evaluation")
-            from evaluation.methods.evaluate_rl_agent import evaluate_rl_agent
-            
+            # CORREZIONE: Usa sempre return_details=True per consistency
+            # Questo garantisce che accuracy e confusion matrix usino gli STESSI campioni
             self.results['rl'] = evaluate_rl_agent(
                 agent=self.agent,
                 classifier_model=self.classifier,
@@ -242,11 +222,39 @@ class EvaluationComparison:
                 device=self.device,
                 num_episodes=num_episodes,
                 max_steps_per_episode=self.config.get('max_steps_per_episode', 3),
-                verbose=True
+                verbose=True,
+                return_details=True  # SEMPRE True per consistency!
             )
             
             self.results['rl']['model_loaded'] = self.rl_model_loaded
-            print(f"✅ Standard RL evaluation completed")
+            
+            # Verifica che abbiamo i dati necessari per confusion matrix
+            if 'predictions' in self.results['rl'] and 'labels' in self.results['rl']:
+                print(f"✅ RL evaluation with detailed predictions completed")
+                print(f"📊 Predictions available: {len(self.results['rl']['predictions'])}")
+                print(f"🏷️ Labels available: {len(self.results['rl']['labels'])}")
+                
+                # Calcola accuracy di verifica sui STESSI dati
+                predictions = self.results['rl']['predictions']
+                labels = self.results['rl']['labels']
+                verification_accuracy = sum(p == l for p, l in zip(predictions, labels)) / len(labels)
+                reported_accuracy = self.results['rl']['final_accuracy']
+                
+                print(f"🔍 Verification - Reported accuracy: {reported_accuracy:.4f}")
+                print(f"🔍 Verification - Calculated accuracy: {verification_accuracy:.4f}")
+                print(f"🔍 Verification - Difference: {abs(reported_accuracy - verification_accuracy):.6f}")
+                
+                if abs(reported_accuracy - verification_accuracy) > 0.001:
+                    print(f"⚠️ WARNING: Accuracy mismatch detected!")
+                else:
+                    print(f"✅ Accuracy consistency verified!")
+            else:
+                print(f"❌ ERROR: Missing detailed predictions in RL results")
+                
+        except Exception as e:
+            print(f"❌ Error in RL evaluation: {e}")
+            import traceback
+            traceback.print_exc()
     
     def run_all_evaluations(self) -> None:
         """Esegue tutte le valutazioni configurate."""
@@ -998,6 +1006,25 @@ class EvaluationComparison:
         for method_name, results in self.results.items():
             if 'predictions' in results and 'labels' in results:
                 methods_with_predictions.append((method_name, results))
+                
+                # DEBUGGING: Stampa info sui dati
+                predictions = results['predictions']
+                labels = results['labels']
+                calculated_accuracy = sum(p == l for p, l in zip(predictions, labels)) / len(labels)
+                
+                print(f"📋 {method_name.upper()}:")
+                print(f"   Samples: {len(predictions)}")
+                print(f"   Calculated accuracy: {calculated_accuracy:.4f}")
+                
+                # Confronta con accuracy riportata se disponibile
+                if method_name == 'baseline' and 'accuracy' in results:
+                    reported = results['accuracy']
+                    print(f"   Reported accuracy: {reported:.4f}")
+                    print(f"   Difference: {abs(calculated_accuracy - reported):.6f}")
+                elif method_name == 'rl' and 'final_accuracy' in results:
+                    reported = results['final_accuracy']
+                    print(f"   Reported accuracy: {reported:.4f}")
+                    print(f"   Difference: {abs(calculated_accuracy - reported):.6f}")
         
         if not methods_with_predictions:
             print("⚠️ No detailed predictions available for confusion matrix")
@@ -1018,7 +1045,7 @@ class EvaluationComparison:
             fig, axes = plt.subplots(rows, 3, figsize=(18, 6*rows))
             axes = axes.flatten()
         
-        fig.suptitle('Confusion Matrix Analysis', fontsize=16, fontweight='bold')
+        fig.suptitle('Confusion Matrix Analysis - Fixed Accuracy Calculation', fontsize=16, fontweight='bold')
         
         for i, (method_name, results) in enumerate(methods_with_predictions):
             ax = axes[i]
@@ -1029,31 +1056,31 @@ class EvaluationComparison:
             # Calcola confusion matrix
             cm = confusion_matrix(labels, predictions)
             
+            # CORREZIONE: Usa overall accuracy invece di macro-average
+            overall_accuracy = cm.diagonal().sum() / cm.sum()
+            
             # Crea heatmap
             sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
                     xticklabels=class_names, yticklabels=class_names,
                     ax=ax, cbar_kws={'shrink': 0.8})
             
-            # Calcola accuratezza per classe
-            class_accuracies = cm.diagonal() / cm.sum(axis=1)
-
-            #Usa macro-average accuracy (come nella valutazione)
-            # avg_accuracy = np.mean(class_accuracies)
-            # ax.set_title(f'{method_name.title().replace("_", " ")}\nAccuracy: {avg_accuracy:.3f}', 
-            #             fontweight='bold')
-            
-            #Usa overall accuracy (come nella valutazione)
-            overall_accuracy = cm.diagonal().sum() / cm.sum()  # Totale corretti / Totale campioni
-
+            # CORREZIONE: Usa overall accuracy nel titolo
             ax.set_title(f'{method_name.title().replace("_", " ")}\nAccuracy: {overall_accuracy:.3f}', 
                         fontweight='bold')
-            
             ax.set_xlabel('Predicted')
             ax.set_ylabel('True')
             
             # Ruota le etichette per leggibilità
             ax.tick_params(axis='x', rotation=45)
             ax.tick_params(axis='y', rotation=0)
+            
+            # DEBUG: Stampa comparison
+            if method_name == 'rl':
+                reported_accuracy = results.get('final_accuracy', 0)
+                print(f"🔍 RL ACCURACY DEBUG:")
+                print(f"   Confusion Matrix: {overall_accuracy:.4f}")
+                print(f"   Reported: {reported_accuracy:.4f}")
+                print(f"   Difference: {abs(overall_accuracy - reported_accuracy):.6f}")
         
         # Nascondi subplot non utilizzate
         for j in range(i + 1, len(axes)):
@@ -1062,11 +1089,11 @@ class EvaluationComparison:
         plt.tight_layout()
         
         # Salva confusion matrix
-        cm_path = os.path.join(self.plots_dir, 'confusion_matrices.png')
+        cm_path = os.path.join(self.plots_dir, 'confusion_matrices_fixed.png')
         plt.savefig(cm_path, dpi=300, bbox_inches='tight')
         plt.show()
         
-        print(f"✅ Confusion matrices saved to: {cm_path}")
+        print(f"✅ Confusion matrices (with fixed accuracy) saved to: {cm_path}")
 
     def _create_rl_class_improvement_analysis(self):
         """Analizza per quali classi l'agente RL ha migliorato la classificazione."""
@@ -1454,6 +1481,14 @@ class EvaluationComparison:
     def _get_detailed_predictions_for_method(self, method_name: str, num_samples: int = 1000) -> Dict[str, Any]:
         """Ottiene predizioni dettagliate per un metodo per la confusion matrix."""
         
+        # CORREZIONE: Per RL, non dovremmo mai arrivare qui
+        if method_name == 'rl':
+            print(f"⚠️ WARNING: _get_detailed_predictions_for_method called for RL!")
+            print(f"   This should not happen if evaluate_rl_agent returns details properly.")
+            print(f"   Returning empty dict to avoid duplicate sampling.")
+            return {}
+        
+        # Resto della funzione per altri metodi...
         try:
             # Seleziona campioni casuali
             indices = np.random.choice(len(self.test_dataset), min(num_samples, len(self.test_dataset)), replace=False)

@@ -35,7 +35,8 @@ def evaluate_rl_agent(agent,  # DQNAgent type hint rimosso per compatibilità
                      device: torch.device,
                      num_episodes: int = 1000,
                      max_steps_per_episode: int = 3,
-                     verbose: bool = True) -> Dict[str, Any]:
+                     verbose: bool = True,
+                     return_details: bool = True) -> Dict[str, Any]:
     """
     Valuta l'agente RL su episodi di augmentation dinamica.
     
@@ -47,24 +48,11 @@ def evaluate_rl_agent(agent,  # DQNAgent type hint rimosso per compatibilità
         num_episodes: Numero di episodi da valutare
         max_steps_per_episode: Numero massimo di passi per episodio
         verbose: Se stampare informazioni dettagliate
+        return_details: Se restituire predizioni e label per confusion matrix
     
     Returns:
-        Dict con risultati della valutazione RL:
-        - initial_accuracy: Accuratezza iniziale (prima delle azioni)
-        - final_accuracy: Accuratezza finale (dopo le azioni)  
-        - accuracy_improvement: Miglioramento dell'accuratezza
-        - avg_reward: Reward medio per episodio
-        - improvements: Numero di episodi migliorati
-        - degradations: Numero di episodi peggiorati
-        - improvement_rate: Tasso di miglioramento
-        - degradation_rate: Tasso di peggioramento
-        - avg_confidence_improvement: Miglioramento medio della confidenza
-        - avg_sequence_length: Lunghezza media delle sequenze di azioni
-        - action_counts: Conteggio delle azioni utilizzate
-        - episode_rewards: Lista dei reward per episodio
-        - confidence_improvements: Lista dei miglioramenti di confidenza
-        - inference_time: Tempo totale di inferenza
-        - time_per_sample: Tempo per episodio
+        Dict con risultati della valutazione RL inclusi predictions e labels
+        per garantire consistency tra accuracy e confusion matrix
     """
     if not RL_MODULES_AVAILABLE:
         raise ImportError("RL modules not available. Cannot evaluate RL agent.")
@@ -82,24 +70,29 @@ def evaluate_rl_agent(agent,  # DQNAgent type hint rimosso per compatibilità
         print(f"🎮 Episodes: {num_episodes}")
         print(f"🎯 Max steps per episode: {max_steps_per_episode}")
         print(f"💻 Device: {device}")
+        print(f"📋 Return details: {return_details}")
     
     # Disabilita esplorazione per valutazione
     original_epsilon = getattr(agent, 'epsilon', 0)
     agent.epsilon = 0
     
     with time_evaluation_context("RL AGENT"):
-        # Seleziona episodi casuali
+        # Seleziona episodi casuali UNA SOLA VOLTA
         indices = np.random.choice(len(test_dataset), num_episodes, replace=False)
         
-        # Esegui valutazione
-        results = _evaluate_rl_episodes(
+        if verbose:
+            print(f"🎲 Selected {len(indices)} random episodes (seed fixed for reproducibility)")
+        
+        # Esegui valutazione con tracking dettagliato
+        results = _evaluate_rl_episodes_with_details(
             agent=agent,
             classifier_model=classifier_model,
             test_dataset=test_dataset,
             indices=indices,
             device=device,
             max_steps_per_episode=max_steps_per_episode,
-            verbose=verbose
+            verbose=verbose,
+            return_details=return_details
         )
         
         # Aggiungi metadati
@@ -109,7 +102,8 @@ def evaluate_rl_agent(agent,  # DQNAgent type hint rimosso per compatibilità
             'max_steps_per_episode': max_steps_per_episode,
             'dataset_size': len(test_dataset),
             'agent_epsilon': 0,  # Sempre 0 per valutazione
-            'original_epsilon': original_epsilon
+            'original_epsilon': original_epsilon,
+            'indices_used': indices.tolist()  # Per debug/riproducibilità
         })
         
         if verbose:
@@ -117,6 +111,167 @@ def evaluate_rl_agent(agent,  # DQNAgent type hint rimosso per compatibilità
     
     # Ripristina epsilon originale
     agent.epsilon = original_epsilon
+    
+    return results
+
+
+def _evaluate_rl_episodes_with_details(agent,
+                                     classifier_model: torch.nn.Module,
+                                     test_dataset: torch.utils.data.Dataset,
+                                     indices: np.ndarray,
+                                     device: torch.device,
+                                     max_steps_per_episode: int,
+                                     verbose: bool,
+                                     return_details: bool) -> Dict[str, Any]:
+    """
+    Esegue la valutazione RL sui episodi selezionati con tracking completo.
+    
+    IMPORTANTE: Questa funzione ora traccia sia le metriche di performance
+    che le predizioni dettagliate sugli STESSI campioni per garantire
+    consistency tra accuracy riportata e confusion matrix.
+    """
+    
+    # Metriche di performance
+    initial_correct = []
+    final_correct = []
+    initial_confidences = []
+    final_confidences = []
+    episode_rewards = []
+    action_sequences = []
+    action_counts = defaultdict(int)
+    
+    # Tracking dettagliato per confusion matrix (STESSI campioni!)
+    initial_predictions = []  # Predizioni prima dell'RL
+    final_predictions = []    # Predizioni dopo l'RL  
+    true_labels = []         # Label vere
+    
+    improvements = 0
+    degradations = 0
+    
+    start_time = time.time()
+    
+    progress_desc = "RL episodes (with details)" if return_details else "RL episodes"
+    
+    for idx in tqdm(indices, desc=progress_desc, disable=not verbose):
+        image, true_label = test_dataset[idx]
+        
+        # Inizializza environment
+        env = ImageAugmentationEnv(
+            classifier=classifier_model,
+            max_steps=max_steps_per_episode,
+            device=device
+        )
+        
+        # Reset environment con l'immagine corrente
+        state = env.reset(image, true_label)
+        
+        # Registra stato iniziale
+        initial_is_correct = env.initial_correct
+        initial_confidence = env.initial_confidence
+        initial_prediction = env.initial_prediction  # Predizione iniziale
+        
+        initial_correct.append(initial_is_correct)
+        initial_confidences.append(initial_confidence)
+        
+        # Tracking per confusion matrix
+        if return_details:
+            initial_predictions.append(initial_prediction)
+            true_labels.append(true_label)
+        
+        # Esegui episodio RL
+        episode_reward = 0
+        done = False
+        actions_taken = []
+        
+        while not done:
+            action = agent.select_action(state, training=False)
+            next_state, reward, done, info = env.step(action)
+            
+            actions_taken.append(action)
+            action_counts[get_action_name(action)] += 1
+            episode_reward += reward
+            
+            state = next_state
+        
+        # Ottieni metriche finali dall'environment
+        metrics = env.get_improvement_metrics()
+        final_is_correct = metrics['final_correct']
+        final_confidence = metrics['final_confidence']
+        
+        # CRUCIALE: Ottieni predizione finale per confusion matrix
+        if return_details:
+            with torch.no_grad():
+                # Re-ottieni predizione finale sullo stesso campione
+                final_output = classifier_model(env.augmented_image_tensor.unsqueeze(0))
+                final_prediction = torch.argmax(final_output).item()
+                final_predictions.append(final_prediction)
+        
+        # Registra risultati finali
+        final_correct.append(final_is_correct)
+        final_confidences.append(final_confidence)
+        episode_rewards.append(episode_reward)
+        action_sequences.append(actions_taken)
+        
+        # Conta miglioramenti/peggioramenti
+        if not initial_is_correct and final_is_correct:
+            improvements += 1
+        elif initial_is_correct and not final_is_correct:
+            degradations += 1
+    
+    total_time = time.time() - start_time
+    num_episodes = len(indices)
+    
+    # Calcola metriche aggregate
+    initial_accuracy = sum(initial_correct) / num_episodes
+    final_accuracy = sum(final_correct) / num_episodes
+    accuracy_improvement = final_accuracy - initial_accuracy
+    
+    confidence_improvements = [final - initial for final, initial in zip(final_confidences, initial_confidences)]
+    avg_confidence_improvement = np.mean(confidence_improvements)
+    
+    avg_reward = np.mean(episode_rewards)
+    avg_sequence_length = np.mean([len(seq) for seq in action_sequences])
+    
+    # Risultati base
+    results = {
+        'initial_accuracy': initial_accuracy,
+        'final_accuracy': final_accuracy,
+        'accuracy_improvement': accuracy_improvement,
+        'initial_avg_confidence': np.mean(initial_confidences),
+        'final_avg_confidence': np.mean(final_confidences),
+        'avg_confidence_improvement': avg_confidence_improvement,
+        'avg_reward': avg_reward,
+        'reward_std': np.std(episode_rewards),
+        'improvements': improvements,
+        'degradations': degradations,
+        'improvement_rate': improvements / num_episodes,
+        'degradation_rate': degradations / num_episodes,
+        'net_improvement_rate': (improvements - degradations) / num_episodes,
+        'avg_sequence_length': avg_sequence_length,
+        'action_counts': dict(action_counts),
+        'episode_rewards': episode_rewards,
+        'confidence_improvements': confidence_improvements,
+        'action_sequences': action_sequences,
+        'inference_time': total_time,
+        'time_per_sample': total_time / num_episodes
+    }
+    
+    # Aggiungi dettagli per confusion matrix (STESSI campioni!)
+    if return_details:
+        results.update({
+            'predictions': final_predictions,    # Predizioni finali RL
+            'labels': true_labels,              # Label vere
+            'initial_predictions': initial_predictions,  # Predizioni iniziali (baseline)
+            'total_samples': num_episodes,
+            'details_source': 'same_episodes'   # Flag per debug
+        })
+        
+        # Verifica consistency
+        if len(final_predictions) != num_episodes or len(true_labels) != num_episodes:
+            print(f"⚠️ WARNING: Details length mismatch!")
+            print(f"   Episodes: {num_episodes}")
+            print(f"   Predictions: {len(final_predictions)}")
+            print(f"   Labels: {len(true_labels)}")
     
     return results
 
