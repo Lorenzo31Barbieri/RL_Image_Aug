@@ -20,7 +20,11 @@ from .methods import (
     evaluate_rl_agent
 )
 
+# Import main comparison class - this remains unchanged for backward compatibility
 from .comparison import EvaluationComparison
+
+# New imports for the refactored components
+from .comparison import ResultAggregator, VisualizationManager
 
 __all__ = [
     'load_classifier',
@@ -31,5 +35,7 @@ __all__ = [
     'evaluate_fixed_augmentation',
     'evaluate_tta', 
     'evaluate_rl_agent',
-    'EvaluationComparison'
+    'EvaluationComparison',
+    'ResultAggregator',
+    'VisualizationManager'
 ]
