@@ -7,7 +7,7 @@ from .transforms import get_action_transform
 
 class ImageAugmentationEnv:
     """
-    Improved environment with better reward function and state representation.
+    RL environment
     """
 
     def __init__(self, classifier, max_steps, device):

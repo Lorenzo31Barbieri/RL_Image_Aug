@@ -68,14 +68,14 @@ class RequirementsChecker:
                 self.results.append(RequirementResult(
                     name=f"Required file: {file_path}",
                     passed=True,
-                    message=f"✅ Found: {file_path}",
+                    message=f" Found: {file_path}",
                     is_critical=True
                 ))
             else:
                 self.results.append(RequirementResult(
                     name=f"Required file: {file_path}",
                     passed=False,
-                    message=f"❌ Missing: {file_path}",
+                    message=f" Missing: {file_path}",
                     is_critical=True
                 ))
     
@@ -90,14 +90,14 @@ class RequirementsChecker:
                 self.results.append(RequirementResult(
                     name=f"Optional file: {file_path}",
                     passed=True,
-                    message=f"✅ Found: {file_path}",
+                    message=f" Found: {file_path}",
                     is_critical=False
                 ))
             else:
                 self.results.append(RequirementResult(
                     name=f"Optional file: {file_path}",
                     passed=False,
-                    message=f"⚠️  Missing: {file_path} ({fallback_msg})",
+                    message=f"  Missing: {file_path} ({fallback_msg})",
                     is_critical=False
                 ))
     
@@ -113,7 +113,7 @@ class RequirementsChecker:
                 self.results.append(RequirementResult(
                     name=f"Directory: {dir_path}",
                     passed=True,
-                    message=f"✅ Found directory: {dir_path}",
+                    message=f" Found directory: {dir_path}",
                     is_critical=True
                 ))
             else:
@@ -122,14 +122,14 @@ class RequirementsChecker:
                     self.results.append(RequirementResult(
                         name=f"Directory: {dir_path}",
                         passed=True,
-                        message=f"📁 Created directory: {dir_path}",
+                        message=f" Created directory: {dir_path}",
                         is_critical=True
                     ))
                 except Exception as e:
                     self.results.append(RequirementResult(
                         name=f"Directory: {dir_path}",
                         passed=False,
-                        message=f"❌ Cannot create directory: {dir_path} ({e})",
+                        message=f" Cannot create directory: {dir_path} ({e})",
                         is_critical=True
                     ))
     
@@ -142,14 +142,14 @@ class RequirementsChecker:
             self.results.append(RequirementResult(
                 name="CUDA Support",
                 passed=True,
-                message=f"✅ CUDA available: {device_count} device(s), {device_name}",
+                message=f" CUDA available: {device_count} device(s), {device_name}",
                 is_critical=False
             ))
         else:
             self.results.append(RequirementResult(
                 name="CUDA Support",
                 passed=False,
-                message="⚠️  CUDA not available, using CPU (slower evaluation)",
+                message="  CUDA not available, using CPU (slower evaluation)",
                 is_critical=False
             ))
         
@@ -160,20 +160,20 @@ class RequirementsChecker:
             self.results.append(RequirementResult(
                 name="Python Version",
                 passed=True,
-                message=f"✅ Python {python_version} (supported)",
+                message=f" Python {python_version} (supported)",
                 is_critical=False
             ))
         else:
             self.results.append(RequirementResult(
                 name="Python Version",
                 passed=False,
-                message=f"⚠️  Python {python_version} (recommend 3.8+)",
+                message=f"  Python {python_version} (recommend 3.8+)",
                 is_critical=False
             ))
     
     def _print_results(self) -> None:
         """Print formatted requirement check results."""
-        print("🔍 REQUIREMENTS CHECK")
+        print(" REQUIREMENTS CHECK")
         print("=" * 60)
         
         # Group results
@@ -187,25 +187,25 @@ class RequirementsChecker:
                 print(result.message)
         
         if critical_failed:
-            print("\n❌ CRITICAL ISSUES:")
+            print("\n CRITICAL ISSUES:")
             for result in critical_failed:
                 print(f"  {result.message}")
         
         # Print optional results
         if optional_results:
-            print("\n💡 OPTIONAL/INFO:")
+            print("\n OPTIONAL/INFO:")
             for result in optional_results:
                 print(f"  {result.message}")
         
         # Summary
         if critical_failed:
-            print(f"\n❌ Requirements check failed! Please fix {len(critical_failed)} critical issue(s).")
+            print(f"\n Requirements check failed! Please fix {len(critical_failed)} critical issue(s).")
             print("💡 Required:")
             print("   - Trained VGG19 classifier in ./checkpoint/ckpt.pth")
             print("   - CIFAR-10 data will be downloaded automatically")
             print("   - RL model is optional (will use random agent if missing)")
         else:
-            print(f"\n✅ All critical requirements satisfied!")
+            print(f"\n All critical requirements satisfied!")
         
         print("=" * 60)
     

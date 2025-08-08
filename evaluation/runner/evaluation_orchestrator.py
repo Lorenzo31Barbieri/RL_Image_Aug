@@ -67,11 +67,11 @@ class EvaluationOrchestrator:
     
     def _validate_requirements(self) -> bool:
         """Validate system requirements."""
-        print("🚀 COMPREHENSIVE MODEL EVALUATION")
+        print(" COMPREHENSIVE MODEL EVALUATION")
         print("=" * 60)
-        print(f"📁 Project root: {self.config.data_root}")
-        print(f"💻 Device: {'CUDA' if self._is_cuda_available() else 'CPU'}")
-        print(f"🕐 Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f" Project root: {self.config.data_root}")
+        print(f" Device: {'CUDA' if self._is_cuda_available() else 'CPU'}")
+        print(f" Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("=" * 60)
         
         checker = RequirementsChecker(self.config)
@@ -80,7 +80,7 @@ class EvaluationOrchestrator:
     def _initialize_evaluation_system(self) -> bool:
         """Initialize the evaluation system."""
         try:
-            print("\n📦 LOADING EVALUATION SYSTEM")
+            print("\n LOADING EVALUATION SYSTEM")
             print("-" * 40)
             
             # Print configuration
@@ -89,30 +89,30 @@ class EvaluationOrchestrator:
             
             # Create comparison object
             self.comparison = EvaluationComparison(self.config.__dict__)
-            print("✅ Evaluation system initialized successfully")
+            print(" Evaluation system initialized successfully")
             return True
             
         except Exception as e:
-            print(f"❌ Failed to initialize evaluation system: {e}")
+            print(f" Failed to initialize evaluation system: {e}")
             return False
     
     def _load_models_and_data(self) -> bool:
         """Load models and data."""
         try:
-            print("\n🔄 LOADING MODELS AND DATA")
+            print("\n LOADING MODELS AND DATA")
             print("-" * 40)
             
-            print("📥 Loading models...")
+            print(" Loading models...")
             self.comparison.load_models()
             
-            print("📊 Loading data...")
+            print(" Loading data...")
             self.comparison.load_data()
             
-            print("✅ Models and data loaded successfully")
+            print(" Models and data loaded successfully")
             return True
             
         except Exception as e:
-            print(f"❌ Error loading models/data: {e}")
+            print(f" Error loading models/data: {e}")
             return False
     
     def _run_evaluations(self) -> bool:
@@ -120,25 +120,25 @@ class EvaluationOrchestrator:
         try:
             self.start_time = time.time()
             
-            print("\n🎯 RUNNING EVALUATIONS")
+            print("\n RUNNING EVALUATIONS")
             print("-" * 40)
-            print("🔄 This may take several minutes...")
-            print(f"📊 Evaluating {self.config.tta_samples} samples for TTA")
-            print(f"🤖 Evaluating {self.config.rl_episodes} episodes for RL")
+            print(" This may take several minutes...")
+            print(f" Evaluating {self.config.tta_samples} samples for TTA")
+            print(f" Evaluating {self.config.rl_episodes} episodes for RL")
             
             self.comparison.run_all_evaluations()
             self.results = self.comparison.results
             
-            print("✅ All evaluations completed successfully")
+            print(" All evaluations completed successfully")
             return True
             
         except Exception as e:
-            print(f"❌ Error during evaluation: {e}")
+            print(f" Error during evaluation: {e}")
             return False
     
     def _generate_outputs(self) -> None:
         """Generate all outputs (plots, reports, etc.)."""
-        print("\n📊 GENERATING OUTPUTS")
+        print("\n GENERATING OUTPUTS")
         print("-" * 40)
         
         # Print results summary
@@ -147,61 +147,61 @@ class EvaluationOrchestrator:
         
         # Create visualizations
         if self.config.create_plots:
-            print("📊 Creating comprehensive analysis...")
+            print(" Creating comprehensive analysis...")
             try:
                 self.comparison.create_plots()
-                print("✅ Visualizations created successfully")
+                print(" Visualizations created successfully")
             except Exception as e:
-                print(f"⚠️  Error creating plots: {e}")
+                print(f"  Error creating plots: {e}")
         
         # Save results
         if self.config.save_results:
             try:
                 self.comparison.save_results()
-                print("✅ Results saved successfully")
+                print(" Results saved successfully")
             except Exception as e:
-                print(f"⚠️  Error saving results: {e}")
+                print(f"  Error saving results: {e}")
     
     def _print_completion_summary(self) -> None:
         """Print final completion summary."""
         total_time = time.time() - self.start_time if self.start_time else 0
         
-        print("\n🎉 EVALUATION COMPLETED SUCCESSFULLY!")
+        print("\n EVALUATION COMPLETED SUCCESSFULLY!")
         print("=" * 60)
-        print(f"⏱️  Total time: {total_time/60:.1f} minutes")
-        print(f"📁 Results saved to: {self.config.output_dir}/")
+        print(f"⏱  Total time: {total_time/60:.1f} minutes")
+        print(f" Results saved to: {self.config.output_dir}/")
         
         # Print key file locations
         plots_dir = f"{self.config.output_dir}/plots"
         images_dir = f"{self.config.output_dir}/improved_images"
         
-        print(f"📊 Main plots: {plots_dir}/comprehensive_comparison.png")
-        print(f"🧠 Confusion matrices: {plots_dir}/confusion_matrices.png")
-        print(f"🏷️  Class analysis: {plots_dir}/rl_class_analysis.png")
-        print(f"🖼️  Improved images: {images_dir}/")
+        print(f" Main plots: {plots_dir}/comprehensive_comparison.png")
+        print(f" Confusion matrices: {plots_dir}/confusion_matrices.png")
+        print(f"  Class analysis: {plots_dir}/rl_class_analysis.png")
+        print(f"  Improved images: {images_dir}/")
         print("=" * 60)
     
     def _handle_interruption(self) -> None:
         """Handle keyboard interruption."""
-        print("\n\n⏹️  Evaluation interrupted by user")
-        print("🔄 You can restart the evaluation anytime")
+        print("\n\n⏹  Evaluation interrupted by user")
+        print(" You can restart the evaluation anytime")
     
     def _handle_error(self, error: Exception) -> None:
         """Handle unexpected errors."""
-        print(f"\n❌ Error during evaluation: {error}")
+        print(f"\n Error during evaluation: {error}")
         print(f"Error type: {type(error).__name__}")
         
         # Print helpful debugging info
         error_str = str(error).lower()
-        print("\n🔍 Debugging information:")
+        print("\n Debugging information:")
         if "not found" in error_str:
-            print("💡 File not found - check your model paths")
+            print(" File not found - check your model paths")
         elif "cuda" in error_str:
-            print("💡 CUDA error - try running with CPU: export CUDA_VISIBLE_DEVICES=''")
+            print(" CUDA error - try running with CPU: export CUDA_VISIBLE_DEVICES=''")
         elif "memory" in error_str:
-            print("💡 Memory error - try reducing batch_size in config")
+            print(" Memory error - try reducing batch_size in config")
         else:
-            print("💡 General error - check the full traceback above")
+            print(" General error - check the full traceback above")
         
         import traceback
         traceback.print_exc()

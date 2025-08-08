@@ -60,7 +60,7 @@ def get_cifar10_test_dataset(data_root: str = DEFAULT_DATA_ROOT,
         transform=transform
     )
     
-    print(f"✅ Test dataset loaded: {len(test_dataset)} samples")
+    print(f"Test dataset loaded: {len(test_dataset)} samples")
     return test_dataset
 
 
@@ -98,8 +98,8 @@ def get_cifar10_test_loader(data_root: str = DEFAULT_DATA_ROOT,
         pin_memory=torch.cuda.is_available()
     )
     
-    print(f"✅ DataLoader created: batch_size={batch_size}, shuffle={shuffle}")
-    print(f"📊 Total batches: {len(test_loader)}")
+    print(f"DataLoader created: batch_size={batch_size}, shuffle={shuffle}")
+    print(f"Total batches: {len(test_loader)}")
     
     return test_loader
 
@@ -129,7 +129,7 @@ def create_sample_subset(dataset: torchvision.datasets.CIFAR10,
     indices = np.random.choice(total_samples, num_samples, replace=False)
     subset = Subset(dataset, indices)
     
-    print(f"📊 Created subset with {len(subset)} samples from {total_samples}")
+    print(f"Created subset with {len(subset)} samples from {total_samples}")
     return subset
 
 
@@ -156,7 +156,7 @@ def analyze_dataset_distribution(dataset: torchvision.datasets.CIFAR10) -> dict:
     Returns:
         Dict con statistiche della distribuzione
     """
-    print("🔍 Analyzing dataset distribution...")
+    print("Analyzing dataset distribution...")
     
     # Conta le classi
     class_counts = {}
@@ -167,7 +167,7 @@ def analyze_dataset_distribution(dataset: torchvision.datasets.CIFAR10) -> dict:
     total_samples = len(dataset)
     class_names = get_cifar10_class_names()
     
-    print(f"📊 Dataset Distribution:")
+    print(f"Dataset Distribution:")
     for class_id in sorted(class_counts.keys()):
         count = class_counts[class_id]
         percentage = (count / total_samples) * 100
@@ -192,7 +192,7 @@ def validate_dataset_compatibility(dataset: torchvision.datasets.CIFAR10) -> Non
     Raises:
         ValueError: Se il dataset non è compatibile
     """
-    print("🔍 Validating dataset compatibility...")
+    print("Validating dataset compatibility...")
     
     if len(dataset) == 0:
         raise ValueError("Dataset is empty")
@@ -204,15 +204,15 @@ def validate_dataset_compatibility(dataset: torchvision.datasets.CIFAR10) -> Non
         # Controlla le dimensioni dell'immagine
         if isinstance(sample_image, torch.Tensor):
             if sample_image.shape != (3, 32, 32):
-                print(f"⚠️ Warning: Unexpected image shape {sample_image.shape}, expected (3, 32, 32)")
+                print(f"Warning: Unexpected image shape {sample_image.shape}, expected (3, 32, 32)")
         
         # Controlla il range delle label
         if not (0 <= sample_label < DEFAULT_NUM_CLASSES):
             raise ValueError(f"Label {sample_label} out of expected range [0, {DEFAULT_NUM_CLASSES-1}]")
         
-        print(f"✅ Dataset validation passed")
-        print(f"📊 Sample image shape: {sample_image.shape if isinstance(sample_image, torch.Tensor) else 'PIL Image'}")
-        print(f"🏷️  Sample label: {sample_label}")
+        print(f"Dataset validation passed")
+        print(f"Sample image shape: {sample_image.shape if isinstance(sample_image, torch.Tensor) else 'PIL Image'}")
+        print(f"Sample label: {sample_label}")
         
     except Exception as e:
         raise ValueError(f"Dataset validation failed: {e}")
@@ -271,10 +271,10 @@ def create_evaluation_dataloader(data_root: str = DEFAULT_DATA_ROOT,
         'distribution': distribution_info
     }
     
-    print(f"🚀 Evaluation DataLoader ready:")
-    print(f"  📦 Batches: {info['num_batches']} × {batch_size}")
-    print(f"  👥 Workers: {num_workers}")
-    print(f"  📌 Pin memory: {pin_memory}")
+    print(f"Evaluation DataLoader ready:")
+    print(f"  Batches: {info['num_batches']} × {batch_size}")
+    print(f"  Workers: {num_workers}")
+    print(f"  Pin memory: {pin_memory}")
     
     return dataloader, info
 
@@ -291,18 +291,18 @@ def print_data_loading_summary(dataloader: DataLoader, info: dict) -> None:
     print("DATA LOADING SUMMARY")
     print(f"{'='*60}")
     
-    print(f"📊 DATASET INFO:")
+    print(f"DATASET INFO:")
     print(f"  Total samples: {info['total_samples']:,}")
     print(f"  Classes: {info['distribution']['num_classes']}")
     print(f"  Batch size: {info['batch_size']}")
     print(f"  Total batches: {info['num_batches']}")
     
-    print(f"\n⚡ PERFORMANCE CONFIG:")
+    print(f"\nPERFORMANCE CONFIG:")
     print(f"  Workers: {info['num_workers']}")
-    print(f"  Pin memory: {'✅' if info['pin_memory'] else '❌'}")
-    print(f"  CUDA available: {'✅' if torch.cuda.is_available() else '❌'}")
+    print(f"  Pin memory: {'OK' if info['pin_memory'] else 'NO'}")
+    print(f"  CUDA available: {'OK' if torch.cuda.is_available() else 'NO'}")
     
-    print(f"\n🏷️  CLASS DISTRIBUTION:")
+    print(f"\n🏷️CLASS DISTRIBUTION:")
     class_names = get_cifar10_class_names()
     for class_id, count in info['distribution']['class_counts'].items():
         percentage = (count / info['total_samples']) * 100
@@ -330,7 +330,7 @@ class FixedAugmentationTransform:
                     self.transforms_to_apply.append(_ACTIONS_MAP[action_id][0])
                 else:
                     raise ValueError(f"Action ID {action_id} not found in _ACTIONS_MAP.")
-            print(f"✅ Fixed augmentation configured with {len(self.transforms_to_apply)} transforms")
+            print(f"Fixed augmentation configured with {len(self.transforms_to_apply)} transforms")
         except ImportError:
             raise ImportError("Cannot import _ACTIONS_MAP from transforms module")
 

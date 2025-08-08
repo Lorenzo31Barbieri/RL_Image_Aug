@@ -26,7 +26,7 @@ try:
     RL_MODULES_AVAILABLE = True
 except ImportError:
     RL_MODULES_AVAILABLE = False
-    print("⚠️ Warning: RL modules not available. Some functionality will be limited.")
+    print(" Warning: RL modules not available. Some functionality will be limited.")
 
 
 def evaluate_rl_agent(agent,  # DQNAgent type hint rimosso per compatibilità
@@ -62,15 +62,15 @@ def evaluate_rl_agent(agent,  # DQNAgent type hint rimosso per compatibilità
     if num_episodes > len(test_dataset):
         num_episodes = len(test_dataset)
         if verbose:
-            print(f"⚠️ Adjusted num_episodes to dataset size: {num_episodes}")
+            print(f" Adjusted num_episodes to dataset size: {num_episodes}")
     
     if verbose:
-        print(f"🤖 Starting RL agent evaluation...")
-        print(f"📊 Dataset size: {len(test_dataset)} samples")
-        print(f"🎮 Episodes: {num_episodes}")
-        print(f"🎯 Max steps per episode: {max_steps_per_episode}")
-        print(f"💻 Device: {device}")
-        print(f"📋 Return details: {return_details}")
+        print(f" Starting RL agent evaluation...")
+        print(f" Dataset size: {len(test_dataset)} samples")
+        print(f" Episodes: {num_episodes}")
+        print(f" Max steps per episode: {max_steps_per_episode}")
+        print(f" Device: {device}")
+        print(f" Return details: {return_details}")
     
     # Disabilita esplorazione per valutazione
     original_epsilon = getattr(agent, 'epsilon', 0)
@@ -81,7 +81,7 @@ def evaluate_rl_agent(agent,  # DQNAgent type hint rimosso per compatibilità
         indices = np.random.choice(len(test_dataset), num_episodes, replace=False)
         
         if verbose:
-            print(f"🎲 Selected {len(indices)} random episodes (seed fixed for reproducibility)")
+            print(f" Selected {len(indices)} random episodes (seed fixed for reproducibility)")
         
         # Esegui valutazione con tracking dettagliato
         results = _evaluate_rl_episodes_with_details(
@@ -268,7 +268,7 @@ def _evaluate_rl_episodes_with_details(agent,
         
         # Verifica consistency
         if len(final_predictions) != num_episodes or len(true_labels) != num_episodes:
-            print(f"⚠️ WARNING: Details length mismatch!")
+            print(f"   WARNING: Details length mismatch!")
             print(f"   Episodes: {num_episodes}")
             print(f"   Predictions: {len(final_predictions)}")
             print(f"   Labels: {len(true_labels)}")
@@ -402,54 +402,41 @@ def _print_rl_summary(results: Dict[str, Any]) -> None:
     print("RL AGENT EVALUATION RESULTS")
     print(f"{'='*60}")
     
-    print(f"🎮 EPISODES: {results['num_episodes_evaluated']}")
-    print(f"🎯 Max steps per episode: {results['max_steps_per_episode']}")
-    print(f"🔄 Average sequence length: {results['avg_sequence_length']:.1f}")
+    print(f" EPISODES: {results['num_episodes_evaluated']}")
+    print(f" Max steps per episode: {results['max_steps_per_episode']}")
+    print(f" Average sequence length: {results['avg_sequence_length']:.1f}")
     
-    print(f"\n📈 ACCURACY COMPARISON:")
+    print(f"\n ACCURACY COMPARISON:")
     print(f"  Initial: {results['initial_accuracy']:.4f}")
     print(f"  Final: {results['final_accuracy']:.4f}")
     
-    improvement_sign = "📈" if results['accuracy_improvement'] > 0 else "📉" if results['accuracy_improvement'] < 0 else "➡️"
-    print(f"  {improvement_sign} Improvement: {results['accuracy_improvement']:+.4f}")
+    print(f"Improvement: {results['accuracy_improvement']:+.4f}")
     
-    print(f"\n🔍 CONFIDENCE ANALYSIS:")
+    print(f"\n CONFIDENCE ANALYSIS:")
     print(f"  Initial confidence: {results['initial_avg_confidence']:.4f}")
     print(f"  Final confidence: {results['final_avg_confidence']:.4f}")
     print(f"  Change: {results['avg_confidence_improvement']:+.4f}")
     
-    print(f"\n🏆 REWARD ANALYSIS:")
+    print(f"\n REWARD ANALYSIS:")
     print(f"  Average reward: {results['avg_reward']:.3f} ± {results['reward_std']:.3f}")
     positive_rewards = [r for r in results['episode_rewards'] if r > 0]
     success_rate = len(positive_rewards) / len(results['episode_rewards']) if results['episode_rewards'] else 0
     print(f"  Success rate: {success_rate:.1%} ({len(positive_rewards)} positive rewards)")
     
-    print(f"\n📊 IMPROVEMENT BREAKDOWN:")
+    print(f"\n IMPROVEMENT BREAKDOWN:")
     print(f"  Improved episodes: {results['improvements']} ({results['improvement_rate']:.1%})")
     print(f"  Degraded episodes: {results['degradations']} ({results['degradation_rate']:.1%})")
     print(f"  Net success rate: {results['net_improvement_rate']:+.1%}")
     
-    print(f"\n🔧 ACTION USAGE:")
+    print(f"\n ACTION USAGE:")
     # Mostra le azioni più utilizzate
     sorted_actions = sorted(results['action_counts'].items(), key=lambda x: x[1], reverse=True)
     for i, (action_name, count) in enumerate(sorted_actions[:5]):
         print(f"  {i+1}. {action_name}: {count} times")
     
-    print(f"\n⚡ PERFORMANCE:")
+    print(f"\n PERFORMANCE:")
     print(f"  Total time: {results['inference_time']:.2f}s")
     print(f"  Time per episode: {results['time_per_sample']*1000:.1f}ms")
-    
-    # Raccomandazione
-    if results['accuracy_improvement'] > 0.01 and results['avg_reward'] > 0.1:
-        recommendation = "✅ Strong performance - Agent is effective"
-    elif results['accuracy_improvement'] > 0.005 or results['avg_reward'] > 0:
-        recommendation = "⚠️ Moderate performance - Some benefit observed"
-    elif results['accuracy_improvement'] > 0:
-        recommendation = "📊 Weak performance - Limited improvement"
-    else:
-        recommendation = "❌ Poor performance - Consider retraining"
-    
-    print(f"\n💡 RECOMMENDATION: {recommendation}")
     print(f"{'='*60}")
 
 
@@ -471,7 +458,7 @@ def analyze_rl_agent_behavior(agent,
     Returns:
         Dict con analisi comportamentale dell'agente
     """
-    print(f"🔬 Analyzing RL agent behavior over {num_episodes} episodes...")
+    print(f" Analyzing RL agent behavior over {num_episodes} episodes...")
     
     # Esegui valutazione standard
     results = evaluate_rl_agent(
@@ -532,7 +519,7 @@ def analyze_rl_agent_behavior(agent,
     
     results['behavioral_analysis'] = behavioral_analysis
     
-    print(f"\n🧠 BEHAVIORAL ANALYSIS:")
+    print(f"\n BEHAVIORAL ANALYSIS:")
     print(f"  Pattern diversity: {behavioral_analysis['pattern_diversity']} unique sequences")
     print(f"  Avg sequence length: {behavioral_analysis['avg_sequence_length']:.1f} ± {behavioral_analysis['sequence_length_std']:.1f}")
     
@@ -541,7 +528,7 @@ def analyze_rl_agent_behavior(agent,
         pattern_names = [get_action_name(a) for a in pattern]
         print(f"  Most common pattern: {pattern_names} ({count} times)")
     
-    print(f"\n🎯 TOP ACTION PERFORMANCE:")
+    print(f"\n TOP ACTION PERFORMANCE:")
     sorted_actions = sorted(action_stats.items(), key=lambda x: x[1]['avg_reward'], reverse=True)
     for i, (action_name, stats) in enumerate(sorted_actions[:5]):
         print(f"  {i+1}. {action_name}: {stats['avg_reward']:.3f} reward ({stats['success_rate']:.1%} success)")
@@ -569,7 +556,7 @@ def compare_rl_with_random_baseline(agent,
     Returns:
         Dict con confronto RL vs random
     """
-    print(f"🎲 Comparing RL agent with random baseline...")
+    print(f" Comparing RL agent with random baseline...")
     
     # Valutazione agente RL
     rl_results = evaluate_rl_agent(
@@ -583,7 +570,7 @@ def compare_rl_with_random_baseline(agent,
     )
     
     # Valutazione baseline casuale
-    print("🎯 Evaluating random action baseline...")
+    print(" Evaluating random action baseline...")
     random_results = _evaluate_random_baseline(
         classifier_model=classifier_model,
         test_dataset=test_dataset,
@@ -603,7 +590,7 @@ def compare_rl_with_random_baseline(agent,
         }
     }
     
-    print(f"\n🏆 RL vs RANDOM COMPARISON:")
+    print(f"\n RL vs RANDOM COMPARISON:")
     print(f"  Accuracy improvement:")
     print(f"    RL: {rl_results['accuracy_improvement']:+.4f}")
     print(f"    Random: {random_results['accuracy_improvement']:+.4f}")
@@ -613,19 +600,6 @@ def compare_rl_with_random_baseline(agent,
     print(f"    RL: {rl_results['avg_reward']:.3f}")
     print(f"    Random: {random_results['avg_reward']:.3f}")
     print(f"    RL Advantage: {comparison['rl_advantage']['avg_reward']:+.3f}")
-    
-    # Valutazione significatività
-    if comparison['rl_advantage']['accuracy_improvement'] > 0.01:
-        significance = "🟢 Highly Significant"
-    elif comparison['rl_advantage']['accuracy_improvement'] > 0.005:
-        significance = "🟡 Significant"
-    elif comparison['rl_advantage']['accuracy_improvement'] > 0.001:
-        significance = "🟠 Marginal"
-    else:
-        significance = "🔴 Not Significant"
-    
-    comparison['significance_assessment'] = significance
-    print(f"  Significance: {significance}")
     
     return comparison
 
@@ -738,7 +712,7 @@ def evaluate_rl_robustness(agent,
     Returns:
         Dict con statistiche di robustezza
     """
-    print(f"🔬 Testing RL agent robustness over {num_runs} runs...")
+    print(f" Testing RL agent robustness over {num_runs} runs...")
     
     accuracy_improvements = []
     avg_rewards = []
@@ -780,16 +754,6 @@ def evaluate_rl_robustness(agent,
     cv_accuracy = robustness_results['accuracy_improvement_std'] / abs(robustness_results['accuracy_improvement_mean']) if robustness_results['accuracy_improvement_mean'] != 0 else float('inf')
     cv_reward = robustness_results['reward_std'] / abs(robustness_results['reward_mean']) if robustness_results['reward_mean'] != 0 else float('inf')
     
-    if cv_accuracy < 0.2 and cv_reward < 0.3:
-        stability = "🟢 Very Stable"
-    elif cv_accuracy < 0.5 and cv_reward < 0.5:
-        stability = "🟡 Stable"
-    elif cv_accuracy < 1.0 and cv_reward < 1.0:
-        stability = "🟠 Moderately Stable"
-    else:
-        stability = "🔴 Unstable"
-    
-    robustness_results['stability_assessment'] = stability
     robustness_results['cv_accuracy'] = cv_accuracy
     robustness_results['cv_reward'] = cv_reward
     
@@ -797,7 +761,6 @@ def evaluate_rl_robustness(agent,
     print(f"  Accuracy improvement: {robustness_results['accuracy_improvement_mean']:.4f} ± {robustness_results['accuracy_improvement_std']:.4f}")
     print(f"  Average reward: {robustness_results['reward_mean']:.3f} ± {robustness_results['reward_std']:.3f}")
     print(f"  Success rate: {robustness_results['success_rate_mean']:.1%} ± {robustness_results['success_rate_std']:.1%}")
-    print(f"  Stability: {stability}")
     
     return robustness_results
 
@@ -834,18 +797,18 @@ def run_rl_agent_evaluation(classifier_path: str = './checkpoint/ckpt.pth',
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    print(f"🚀 Running complete RL agent evaluation...")
-    print(f"📁 Classifier: {classifier_path}")
-    print(f"📁 RL model: {rl_model_path}")
-    print(f"📁 Data root: {data_root}")
-    print(f"🎮 Episodes: {num_episodes}")
+    print(f" Running complete RL agent evaluation...")
+    print(f" Classifier: {classifier_path}")
+    print(f" RL model: {rl_model_path}")
+    print(f" Data root: {data_root}")
+    print(f" Episodes: {num_episodes}")
     
     # Carica modelli
     classifier = load_classifier(classifier_path, device)
     agent, model_loaded = load_rl_agent(rl_model_path, state_dim=state_dim, device=device)
     
     if not model_loaded:
-        print("⚠️ Warning: Using randomly initialized RL agent")
+        print(" Warning: Using randomly initialized RL agent")
     
     # Carica dataset
     test_dataset = get_cifar10_test_dataset(data_root=data_root)
@@ -896,14 +859,14 @@ def evaluate_rl_agent_detailed(agent,
     if num_episodes > len(test_dataset):
         num_episodes = len(test_dataset)
         if verbose:
-            print(f"⚠️ Adjusted num_episodes to dataset size: {num_episodes}")
+            print(f" Adjusted num_episodes to dataset size: {num_episodes}")
     
     if verbose:
-        print(f"🤖 Starting detailed RL agent evaluation...")
-        print(f"📊 Dataset size: {len(test_dataset)} samples")
-        print(f"🎮 Episodes: {num_episodes}")
-        print(f"🎯 Max steps per episode: {max_steps_per_episode}")
-        print(f"💾 Save examples: {save_examples}")
+        print(f" Starting detailed RL agent evaluation...")
+        print(f" Dataset size: {len(test_dataset)} samples")
+        print(f" Episodes: {num_episodes}")
+        print(f" Max steps per episode: {max_steps_per_episode}")
+        print(f" Save examples: {save_examples}")
     
     # Disabilita esplorazione per valutazione
     original_epsilon = getattr(agent, 'epsilon', 0)
@@ -1140,24 +1103,23 @@ def _print_detailed_rl_summary(results: Dict[str, Any]) -> None:
     print("DETAILED RL AGENT EVALUATION RESULTS")
     print(f"{'='*70}")
     
-    print(f"🎮 EPISODES: {results['num_episodes_evaluated']}")
-    print(f"🎯 Max steps per episode: {results['max_steps_per_episode']}")
-    print(f"🔄 Average sequence length: {results['avg_sequence_length']:.1f}")
+    print(f" EPISODES: {results['num_episodes_evaluated']}")
+    print(f" Max steps per episode: {results['max_steps_per_episode']}")
+    print(f" Average sequence length: {results['avg_sequence_length']:.1f}")
     
-    print(f"\n📈 ACCURACY COMPARISON:")
+    print(f"\n ACCURACY COMPARISON:")
     print(f"  Initial: {results['initial_accuracy']:.4f}")
     print(f"  Final: {results['final_accuracy']:.4f}")
     
-    improvement_sign = "📈" if results['accuracy_improvement'] > 0 else "📉" if results['accuracy_improvement'] < 0 else "➡️"
-    print(f"  {improvement_sign} Improvement: {results['accuracy_improvement']:+.4f}")
+    print(f"  Improvement: {results['accuracy_improvement']:+.4f}")
     
-    print(f"\n📊 IMPROVEMENT BREAKDOWN:")
+    print(f"\n IMPROVEMENT BREAKDOWN:")
     print(f"  Improved episodes: {results['improvements']} ({results['improvement_rate']:.1%})")
     print(f"  Degraded episodes: {results['degradations']} ({results['degradation_rate']:.1%})")
     print(f"  Net success rate: {results['net_improvement_rate']:+.1%}")
     
     # Analisi per classe
-    print(f"\n🏷️  CLASS-WISE IMPROVEMENTS:")
+    print(f"\n  CLASS-WISE IMPROVEMENTS:")
     class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer',
                    'dog', 'frog', 'horse', 'ship', 'truck']
     
@@ -1177,14 +1139,14 @@ def _print_detailed_rl_summary(results: Dict[str, Any]) -> None:
     # Esempi di miglioramento
     improvement_examples = results.get('improvement_examples', [])
     if improvement_examples:
-        print(f"\n💡 IMPROVEMENT EXAMPLES: {len(improvement_examples)} saved")
+        print(f"\n IMPROVEMENT EXAMPLES: {len(improvement_examples)} saved")
         for i, example in enumerate(improvement_examples[:3]):  # Mostra primi 3
             class_name = class_names[example['true_label']]
             conf_imp = example['confidence_improvement']
             actions = [get_action_name(a) for a in example['actions']]
             print(f"  {i+1}. {class_name}: +{conf_imp:.3f} confidence via {actions}")
     
-    print(f"\n⚡ PERFORMANCE:")
+    print(f"\n PERFORMANCE:")
     print(f"  Total time: {results['inference_time']:.2f}s")
     print(f"  Time per episode: {results['time_per_sample']*1000:.1f}ms")
     
@@ -1211,17 +1173,17 @@ def run_rl_agent_evaluation_detailed(classifier_path: str = './checkpoint/ckpt.p
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    print(f"🚀 Running detailed RL agent evaluation...")
-    print(f"📁 Classifier: {classifier_path}")
-    print(f"📁 RL model: {rl_model_path}")
-    print(f"🎮 Episodes: {num_episodes}")
+    print(f" Running detailed RL agent evaluation...")
+    print(f" Classifier: {classifier_path}")
+    print(f" RL model: {rl_model_path}")
+    print(f" Episodes: {num_episodes}")
     
     # Carica modelli
     classifier = load_classifier(classifier_path, device)
     agent, model_loaded = load_rl_agent(rl_model_path, state_dim=state_dim, device=device)
     
     if not model_loaded:
-        print("⚠️ Warning: Using randomly initialized RL agent")
+        print(" Warning: Using randomly initialized RL agent")
     
     # Carica dataset
     test_dataset = get_cifar10_test_dataset(data_root=data_root)
@@ -1250,7 +1212,7 @@ if __name__ == '__main__':
     print(f"RL modules available: {RL_MODULES_AVAILABLE}")
     
     if not RL_MODULES_AVAILABLE:
-        print("❌ RL modules not available. Cannot test RL evaluation.")
+        print(" RL modules not available. Cannot test RL evaluation.")
         exit(1)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -1266,10 +1228,10 @@ if __name__ == '__main__':
             device=device
         )
         
-        print(f"\n🎉 RL agent evaluation completed!")
-        print(f"📊 Accuracy improvement: {results['accuracy_improvement']:+.4f}")
-        print(f"🏆 Average reward: {results['avg_reward']:.3f}")
-        print(f"✅ Model loaded from checkpoint: {results['model_loaded']}")
+        print(f"\n RL agent evaluation completed!")
+        print(f" Accuracy improvement: {results['accuracy_improvement']:+.4f}")
+        print(f" Average reward: {results['avg_reward']:.3f}")
+        print(f" Model loaded from checkpoint: {results['model_loaded']}")
         
         # Test analisi comportamentale
         from core.model_loader import load_classifier, load_rl_agent
@@ -1279,7 +1241,7 @@ if __name__ == '__main__':
         agent, _ = load_rl_agent('./models/best_improved_dqn_model.pth', device=device)
         test_dataset = get_cifar10_test_dataset('./data')
         
-        print(f"\n🧠 Testing behavioral analysis...")
+        print(f"\n Testing behavioral analysis...")
         behavioral_results = analyze_rl_agent_behavior(
             agent=agent,
             classifier_model=classifier,
@@ -1288,7 +1250,7 @@ if __name__ == '__main__':
             num_episodes=100
         )
         
-        print(f"\n🎲 Testing comparison with random baseline...")
+        print(f"\n Testing comparison with random baseline...")
         comparison_results = compare_rl_with_random_baseline(
             agent=agent,
             classifier_model=classifier,
@@ -1298,5 +1260,5 @@ if __name__ == '__main__':
         )
         
     except Exception as e:
-        print(f"❌ Error during evaluation: {e}")
+        print(f" Error during evaluation: {e}")
         print("Make sure all required modules and models are available.")

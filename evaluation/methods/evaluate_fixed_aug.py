@@ -56,10 +56,10 @@ def evaluate_fixed_augmentation(classifier_model: torch.nn.Module,
     validate_evaluation_inputs(classifier_model, device=device)
     
     if verbose:
-        print(f"🎯 Starting fixed augmentation evaluation...")
-        print(f"📊 Dataset size: {len(test_dataset)} samples")
-        print(f"🔧 Augmentation IDs: {augmentation_ids}")
-        print(f"📦 Batch size: {batch_size}")
+        print(f" Starting fixed augmentation evaluation...")
+        print(f" Dataset size: {len(test_dataset)} samples")
+        print(f" Augmentation IDs: {augmentation_ids}")
+        print(f" Batch size: {batch_size}")
     
     # Ottieni nomi delle trasformazioni
     augmentation_names = []
@@ -219,38 +219,37 @@ def _print_fixed_aug_summary(results: Dict[str, Any]) -> None:
     print("FIXED AUGMENTATION EVALUATION RESULTS")
     print(f"{'='*60}")
     
-    print(f"🔧 AUGMENTATIONS APPLIED:")
+    print(f" AUGMENTATIONS APPLIED:")
     for i, (aug_id, aug_name) in enumerate(zip(results['augmentation_ids'], results['augmentation_names'])):
         print(f"  {i+1}. ID {aug_id}: {aug_name}")
     
-    print(f"\n📊 ACCURACY COMPARISON:")
+    print(f"\n ACCURACY COMPARISON:")
     print(f"  Baseline: {results['baseline_accuracy']:.4f}")
     print(f"  Augmented: {results['augmented_accuracy']:.4f}")
     
-    improvement_sign = "📈" if results['accuracy_improvement'] > 0 else "📉" if results['accuracy_improvement'] < 0 else "➡️"
-    print(f"  {improvement_sign} Improvement: {results['accuracy_improvement']:+.4f}")
+    print(f"  Improvement: {results['accuracy_improvement']:+.4f}")
     
-    print(f"\n🔍 CONFIDENCE COMPARISON:")
+    print(f"\n CONFIDENCE COMPARISON:")
     print(f"  Baseline: {results['baseline_confidence']:.4f}")
     print(f"  Augmented: {results['augmented_confidence']:.4f}")
     print(f"  Change: {results['confidence_improvement']:+.4f}")
     
-    print(f"\n⏱️ TIMING:")
+    print(f"\n TIMING:")
     print(f"  Baseline time: {results['baseline_time']:.2f}s")
     print(f"  Augmented time: {results['augmented_time']:.2f}s")
     print(f"  Time per sample: {results['time_per_sample']*1000:.1f}ms")
     
     # Raccomandazione
     if results['accuracy_improvement'] > 0.01:
-        recommendation = "✅ Significant improvement - Recommended"
+        recommendation = " Significant improvement - Recommended"
     elif results['accuracy_improvement'] > 0.005:
-        recommendation = "⚠️ Modest improvement - Consider cost/benefit"
+        recommendation = " Modest improvement - Consider cost/benefit"
     elif results['accuracy_improvement'] > 0:
-        recommendation = "📊 Minimal improvement - Limited benefit"
+        recommendation = " Minimal improvement - Limited benefit"
     else:
-        recommendation = "❌ No improvement or degradation - Not recommended"
+        recommendation = " No improvement or degradation - Not recommended"
     
-    print(f"\n💡 RECOMMENDATION: {recommendation}")
+    print(f"\n RECOMMENDATION: {recommendation}")
     print(f"{'='*60}")
 
 
@@ -272,7 +271,7 @@ def compare_multiple_augmentations(classifier_model: torch.nn.Module,
     Returns:
         Dict con confronto tra le configurazioni
     """
-    print(f"🔍 Comparing {len(augmentation_configs)} augmentation configurations...")
+    print(f" Comparing {len(augmentation_configs)} augmentation configurations...")
     
     results = {'comparisons': []}
     
@@ -280,7 +279,7 @@ def compare_multiple_augmentations(classifier_model: torch.nn.Module,
         aug_ids = config['ids']
         config_name = config.get('name', f"Config_{i+1}")
         
-        print(f"\n📋 Evaluating {config_name}: {aug_ids}")
+        print(f"\n Evaluating {config_name}: {aug_ids}")
         
         config_results = evaluate_fixed_augmentation(
             classifier_model=classifier_model,
@@ -313,7 +312,7 @@ def compare_multiple_augmentations(classifier_model: torch.nn.Module,
               f"{comp['accuracy_improvement']:<12.4f} "
               f"{comp['confidence_improvement']:<12.4f}")
     
-    print(f"\n🏆 BEST CONFIG: {best_config['config_name']}")
+    print(f"\n BEST CONFIG: {best_config['config_name']}")
     print(f"  Accuracy improvement: {best_config['accuracy_improvement']:+.4f}")
     print(f"  Augmentations: {best_config['augmentation_names']}")
     
@@ -340,7 +339,7 @@ def evaluate_augmentation_robustness(classifier_model: torch.nn.Module,
     Returns:
         Dict con statistiche di robustezza
     """
-    print(f"🔬 Testing augmentation robustness over {num_runs} runs...")
+    print(f" Testing augmentation robustness over {num_runs} runs...")
     
     accuracies = []
     improvements = []
@@ -380,7 +379,7 @@ def evaluate_augmentation_robustness(classifier_model: torch.nn.Module,
         'all_confidences': confidences
     }
     
-    print(f"\n📊 ROBUSTNESS RESULTS:")
+    print(f"\n ROBUSTNESS RESULTS:")
     print(f"  Mean accuracy: {robustness_results['accuracy_mean']:.4f} ± {robustness_results['accuracy_std']:.4f}")
     print(f"  Mean improvement: {robustness_results['improvement_mean']:.4f} ± {robustness_results['improvement_std']:.4f}")
     print(f"  Range: [{robustness_results['accuracy_min']:.4f}, {robustness_results['accuracy_max']:.4f}]")
@@ -389,13 +388,13 @@ def evaluate_augmentation_robustness(classifier_model: torch.nn.Module,
     cv = robustness_results['accuracy_std'] / robustness_results['accuracy_mean'] if robustness_results['accuracy_mean'] > 0 else float('inf')
     
     if cv < 0.01:
-        stability = "🟢 Very Stable"
+        stability = " Very Stable"
     elif cv < 0.02:
-        stability = "🟡 Stable"
+        stability = " Stable"
     elif cv < 0.05:
-        stability = "🟠 Moderately Stable"
+        stability = " Moderately Stable"
     else:
-        stability = "🔴 Unstable"
+        stability = " Unstable"
     
     robustness_results['stability_assessment'] = stability
     robustness_results['coefficient_of_variation'] = cv
@@ -429,10 +428,10 @@ def run_fixed_augmentation_evaluation(classifier_path: str = './checkpoint/ckpt.
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    print(f"🚀 Running complete fixed augmentation evaluation...")
-    print(f"📁 Classifier: {classifier_path}")
-    print(f"📁 Data root: {data_root}")
-    print(f"🔧 Augmentations: {augmentation_ids}")
+    print(f" Running complete fixed augmentation evaluation...")
+    print(f" Classifier: {classifier_path}")
+    print(f" Data root: {data_root}")
+    print(f" Augmentations: {augmentation_ids}")
     
     # Carica modello
     classifier = load_classifier(classifier_path, device)
@@ -473,9 +472,9 @@ if __name__ == '__main__':
             device=device
         )
         
-        print(f"\n🎉 Fixed augmentation evaluation completed!")
-        print(f"📊 Accuracy improvement: {results['accuracy_improvement']:+.4f}")
-        print(f"🔍 Confidence change: {results['confidence_improvement']:+.4f}")
+        print(f"\n Fixed augmentation evaluation completed!")
+        print(f" Accuracy improvement: {results['accuracy_improvement']:+.4f}")
+        print(f" Confidence change: {results['confidence_improvement']:+.4f}")
         
         # Test confronto multiple configurazioni
         configs = [
@@ -485,7 +484,7 @@ if __name__ == '__main__':
             {'ids': [0, 3, 6], 'name': 'Full_Combo'}
         ]
         
-        print(f"\n🔍 Testing multiple configurations...")
+        print(f"\n Testing multiple configurations...")
         comparison_results = compare_multiple_augmentations(
             classifier_model=load_classifier('./checkpoint/ckpt.pth', device),
             test_dataset=get_cifar10_test_dataset('./data', transform=None),
@@ -494,5 +493,5 @@ if __name__ == '__main__':
         )
         
     except Exception as e:
-        print(f"❌ Error during evaluation: {e}")
+        print(f" Error during evaluation: {e}")
         print("Make sure the classifier, data, and transform modules are available.")

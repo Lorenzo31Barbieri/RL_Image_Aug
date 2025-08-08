@@ -24,7 +24,7 @@ class InteractiveRunner:
     def run_interactive_evaluation(self) -> Optional[Dict[str, Any]]:
         """Run evaluation with interactive prompts."""
         try:
-            print("🚀 COMPREHENSIVE MODEL EVALUATION")
+            print(" COMPREHENSIVE MODEL EVALUATION")
             print("=" * 60)
             
             # 1. Get configuration
@@ -47,17 +47,17 @@ class InteractiveRunner:
             return results
             
         except KeyboardInterrupt:
-            print("\n\n👋 Evaluation interrupted by user. Goodbye!")
+            print("\n\n Evaluation interrupted by user. Goodbye!")
             return None
         except Exception as e:
-            print(f"\n\n❌ Unexpected error: {e}")
+            print(f"\n\n Unexpected error: {e}")
             import traceback
             traceback.print_exc()
             return None
     
     def _get_configuration(self) -> Optional[EvaluationConfig]:
         """Get configuration from user input."""
-        print("📋 CONFIGURATION SETUP")
+        print(" CONFIGURATION SETUP")
         print("-" * 40)
         
         # Ask for configuration type
@@ -85,7 +85,7 @@ class InteractiveRunner:
     
     def _create_custom_config(self) -> Optional[EvaluationConfig]:
         """Create custom configuration through interactive prompts."""
-        print("\n🔧 CUSTOM CONFIGURATION")
+        print("\n CUSTOM CONFIGURATION")
         print("-" * 30)
         
         config = ConfigManager.create_default_config()
@@ -139,16 +139,16 @@ class InteractiveRunner:
         # Estimate time
         total_samples = self.config.tta_samples + self.config.rl_episodes
         if total_samples > 2000:
-            print(f"\n⚠️  This evaluation will process ~{total_samples:,} samples")
+            print(f"\n  This evaluation will process ~{total_samples:,} samples")
             print("   Estimated time: 10-30 minutes depending on your hardware")
         elif total_samples > 1000:
-            print(f"\n📊 This evaluation will process ~{total_samples:,} samples")
+            print(f"\n This evaluation will process ~{total_samples:,} samples")
             print("   Estimated time: 5-15 minutes")
         else:
-            print(f"\n🚀 Quick evaluation: ~{total_samples:,} samples")
+            print(f"\n Quick evaluation: ~{total_samples:,} samples")
             print("   Estimated time: 2-5 minutes")
         
-        return self._get_bool_input("\n❓ Continue with this configuration? (Y/n): ", default=True)
+        return self._get_bool_input("\n Continue with this configuration? (Y/n): ", default=True)
     
     def _print_final_summary(self, results: Dict[str, Any]) -> None:
         """Print final summary of results."""
@@ -163,13 +163,13 @@ class InteractiveRunner:
         print()
         print(ResultsFormatter.format_improvement_summary(results))
         
-        print("\n📁 RESULTS LOCATION:")
+        print("\n RESULTS LOCATION:")
         print(f"  Main directory: {self.config.output_dir}")
-        print("  📊 Plots: ./plots/comprehensive_comparison.png")
-        print("  🧠 Analysis: ./plots/confusion_matrices.png")
-        print("  🖼️  Examples: ./improved_images/")
+        print("   Plots: ./plots/comprehensive_comparison.png")
+        print("   Analysis: ./plots/confusion_matrices.png")
+        print("    Examples: ./improved_images/")
         
-        print("\n🎉 All done! Check the results above and in the output directory.")
+        print("\n All done! Check the results above and in the output directory.")
     
     def _get_int_input(self, prompt: str, default: int, min_val: int = None, max_val: int = None) -> Optional[int]:
         """Get integer input with validation."""

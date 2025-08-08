@@ -1,33 +1,24 @@
 # RL-Based Image Augmentation for CIFAR-10
 
-A comprehensive reinforcement learning approach to adaptive image augmentation that learns optimal transformations to improve classifier performance on CIFAR-10.
+Deep reinforcement learning approach for adaptive image augmentation on CIFAR-10 classification tasks.
 
-## 🎯 Overview
+## Overview
 
-This project implements an intelligent image augmentation system using Deep Q-Networks (DQN) to learn optimal augmentation policies. Unlike fixed augmentation strategies, the RL agent adapts transformations based on image content and classifier confidence, leading to more effective data augmentation.
+This project implements a DQN-based RL agent that learns optimal augmentation policies for improving image classification performance. The system compares multiple augmentation approaches including baseline, fixed augmentation, test-time augmentation (TTA), and the proposed RL method.
 
-## 🏗️ Architecture
+## Project Structure
 
 ```
 ├── src/                           # Core implementation
-│   ├── models/                    # Neural network architectures
-│   │   ├── vgg.py                # VGG classifier implementation
-│   │   └── agent.py              # DQN agent implementation
-│   ├── environment/               # RL environment
-│   │   ├── environment.py        # Image augmentation environment
-│   │   └── transforms.py         # Transformation actions (16 total)
-│   └── utils/                     # Utility functions
 ├── evaluation/                    # Comprehensive evaluation system
-│   ├── core/                      # Core evaluation utilities
-│   ├── methods/                   # Individual evaluation methods
-│   ├── comparison/                # Orchestration and comparison
-│   └── runner/                    # Interactive and automated running
 ├── classifier/                    # CIFAR-10 classifier training
-├── scripts/                       # Training and evaluation scripts
-└── full_evaluation.py            # Main evaluation entry point
+├── rl_image_tools/                # Tools for saving original/augmented images
+├── full_evaluation.py             # Main evaluation entry point
+└── training_script_improved.py    # Script for RL agent training
 ```
+*Check dedicated README for more details*
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Installation
 
@@ -56,7 +47,7 @@ This creates `./checkpoint/ckpt.pth` with the trained classifier.
 Train the DQN agent to learn optimal augmentation policies:
 
 ```bash
-python scripts/training_script_improved.py
+python training_script_improved.py
 ```
 
 This creates `./models/best_improved_dqn_model.pth` with the trained agent.
@@ -79,7 +70,7 @@ For quick testing:
 python full_evaluation.py --quick
 ```
 
-## 🧠 RL Environment
+## RL Environment
 
 ### State Representation (15D)
 - **Logits (10D)**: Classifier output probabilities
@@ -105,7 +96,7 @@ python full_evaluation.py --quick
 - **+2×conf_change**: Confidence improvement when incorrect
 - **Penalties**: For aggressive transformations and inefficiency
 
-## 📊 Evaluation Methods
+## Evaluation Methods
 
 ### 1. Baseline
 Standard classifier performance without augmentation.
@@ -119,7 +110,7 @@ Apply multiple transformations and average predictions.
 ### 4. RL Agent
 Dynamic augmentation using the trained DQN agent.
 
-## 📈 Results & Analysis
+## Results & Analysis
 
 ### Typical Results using a classifier with 80% accuracy
 - **Baseline**: ~80% accuracy
@@ -129,7 +120,7 @@ Dynamic augmentation using the trained DQN agent.
 
 *Results vary based on model training and hyperparameters*
 
-## 🛠️ Advanced Usage
+## Advanced Usage
 
 ### Custom Evaluation Configuration
 
@@ -176,7 +167,7 @@ Add new transformations to `src/environment/transforms.py`:
 16: (lambda img: your_custom_transform(img), "Custom Transform"),
 ```
 
-## 🔧 Configuration Options
+## Configuration Options
 
 Key parameters in evaluation config:
 
@@ -200,7 +191,7 @@ create_plots: bool = True
 save_results: bool = True
 ```
 
-## 📁 Output Structure
+## Output Structure
 
 After evaluation, results are saved to:
 
@@ -214,11 +205,11 @@ After evaluation, results are saved to:
 └── summary_YYYYMMDD_HHMMSS.json       # Summary metrics
 ```
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License
 
-## 👥 Authors
+## Authors
 
 - **Lorenzo Barbieri** - [GitHub](https://github.com/Lorenzo31Barbieri)
 

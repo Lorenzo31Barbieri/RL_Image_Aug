@@ -1,18 +1,11 @@
 #!/usr/bin/env python3
 """
-COMPREHENSIVE MODEL EVALUATION - REFACTORED
+COMPREHENSIVE MODEL EVALUATION
 ===========================================
 
 Streamlined main script for comprehensive model evaluation.
-Now uses modular architecture with separated concerns.
 
 Usage: python full_evaluation_refactored.py [--quick] [--config CONFIG_FILE]
-
-FEATURES:
-- Modular architecture with separated concerns
-- Interactive configuration
-- Comprehensive reporting and visualization
-- Clean error handling and user feedback
 """
 
 import sys
@@ -23,7 +16,7 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-# Import the new modular components
+# Import modular components
 from evaluation.runner.config_manager import ConfigManager, EvaluationConfig
 from evaluation.runner.evaluation_orchestrator import create_and_run_evaluation
 from evaluation.runner.interactive_runner import InteractiveRunner
@@ -121,15 +114,15 @@ def validate_environment():
         from evaluation.comparison import EvaluationComparison
         return True
     except ImportError as e:
-        print(f"❌ Error: Cannot import evaluation system: {e}")
-        print("💡 Make sure you're running from the project root directory")
-        print("💡 And that all required modules are properly installed")
+        print(f"Error: Cannot import evaluation system: {e}")
+        print("Make sure you're running from the project root directory")
+        print("And that all required modules are properly installed")
         return False
 
 
 def main():
     """Main entry point."""
-    print("🚀 COMPREHENSIVE MODEL EVALUATION SYSTEM")
+    print("COMPREHENSIVE MODEL EVALUATION SYSTEM")
     print("=" * 60)
     
     # Validate environment
@@ -144,7 +137,7 @@ def main():
             # Non-interactive mode: use configuration from args
             config = create_config_from_args(args)
             
-            print("🤖 Running in non-interactive mode")
+            print("Running in non-interactive mode")
             ConfigManager.print_config_summary(config)
             
             # Run evaluation
@@ -152,7 +145,7 @@ def main():
             
         else:
             # Interactive mode: use interactive runner
-            print("👥 Running in interactive mode")
+            print("Running in interactive mode")
             print("   Use --non-interactive to skip prompts")
             print()
             
@@ -164,12 +157,12 @@ def main():
                 ConfigManager.print_config_summary(config)
                 
                 try:
-                    response = input("\n❓ Continue with this configuration? (Y/n): ").strip().lower()
+                    response = input("\nContinue with this configuration? (Y/n): ").strip().lower()
                     if response and response not in ['y', 'yes']:
-                        print("👋 Evaluation cancelled")
+                        print("Evaluation cancelled")
                         sys.exit(0)
                 except (EOFError, KeyboardInterrupt):
-                    print("\n👋 Evaluation cancelled")
+                    print("\nEvaluation cancelled")
                     sys.exit(0)
                 
                 results = create_and_run_evaluation(config)
@@ -180,19 +173,19 @@ def main():
         
         # Handle results
         if results:
-            print("\n🎉 Evaluation completed successfully!")
+            print("\nEvaluation completed successfully!")
             sys.exit(0)
         else:
-            print("\n❌ Evaluation failed or was cancelled")
+            print("\nEvaluation failed or was cancelled")
             sys.exit(1)
             
     except KeyboardInterrupt:
-        print("\n\n👋 Evaluation interrupted by user. Goodbye!")
+        print("\n\nEvaluation interrupted by user. Goodbye!")
         sys.exit(0)
     
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
-        print("💡 Run with --help for usage information")
+        print(f"\nUnexpected error: {e}")
+        print("Run with --help for usage information")
         import traceback
         traceback.print_exc()
         sys.exit(1)

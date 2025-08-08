@@ -119,25 +119,25 @@ def evaluate_tta(classifier_model: torch.nn.Module,
     if num_samples > len(test_dataset):
         num_samples = len(test_dataset)
         if verbose:
-            print(f"⚠️ Adjusted num_samples to dataset size: {num_samples}")
+            print(f" Adjusted num_samples to dataset size: {num_samples}")
     
     if verbose:
-        print(f"🎯 Starting TTA evaluation...")
-        print(f"📊 Dataset size: {len(test_dataset)} samples")
-        print(f"🔬 Evaluating on: {num_samples} samples")
-        print(f"💻 Device: {device}")
+        print(f" Starting TTA evaluation...")
+        print(f" Dataset size: {len(test_dataset)} samples")
+        print(f" Evaluating on: {num_samples} samples")
+        print(f" Device: {device}")
     
     # Determina quale implementazione TTA usare
     if use_ttach and TTA_AVAILABLE:
         method_used = 'ttach'
         if verbose:
-            print("✅ Using ttach library for TTA")
+            print(" Using ttach library for TTA")
     else:
         method_used = 'manual'
         if verbose:
-            print("📝 Using manual TTA implementation")
+            print(" Using manual TTA implementation")
             if use_ttach and not TTA_AVAILABLE:
-                print("⚠️ ttach not available, falling back to manual")
+                print(" ttach not available, falling back to manual")
     
     with time_evaluation_context("TTA"):
         # Seleziona campioni casuali
@@ -152,7 +152,7 @@ def evaluate_tta(classifier_model: torch.nn.Module,
             num_augmentations = tta_model.get_num_augmentations()
         
         if verbose:
-            print(f"🔧 TTA configured with {num_augmentations} augmentations")
+            print(f" TTA configured with {num_augmentations} augmentations")
         
         # Esegui valutazione
         results = _evaluate_tta_on_samples(
@@ -289,28 +289,27 @@ def _print_tta_summary(results: Dict[str, Any]) -> None:
     print("TEST-TIME AUGMENTATION EVALUATION RESULTS")
     print(f"{'='*60}")
     
-    print(f"🔧 METHOD: {results['method_used'].upper()}")
-    print(f"🎯 Augmentations used: {results['num_augmentations']}")
-    print(f"📊 Samples evaluated: {results['total_samples_evaluated']}")
+    print(f" METHOD: {results['method_used'].upper()}")
+    print(f" Augmentations used: {results['num_augmentations']}")
+    print(f" Samples evaluated: {results['total_samples_evaluated']}")
     
-    print(f"\n📈 ACCURACY COMPARISON:")
+    print(f"\n ACCURACY COMPARISON:")
     print(f"  Baseline: {results['baseline_accuracy']:.4f}")
     print(f"  TTA: {results['tta_accuracy']:.4f}")
     
-    improvement_sign = "📈" if results['accuracy_improvement'] > 0 else "📉" if results['accuracy_improvement'] < 0 else "➡️"
-    print(f"  {improvement_sign} Improvement: {results['accuracy_improvement']:+.4f}")
+    print(f"  Improvement: {results['accuracy_improvement']:+.4f}")
     
-    print(f"\n🔍 CONFIDENCE ANALYSIS:")
+    print(f"\n CONFIDENCE ANALYSIS:")
     print(f"  Baseline confidence: {results['baseline_avg_confidence']:.4f}")
     print(f"  TTA confidence: {results['tta_avg_confidence']:.4f}")
     print(f"  Change: {results['avg_confidence_improvement']:+.4f}")
     
-    print(f"\n📊 IMPROVEMENT BREAKDOWN:")
+    print(f"\n IMPROVEMENT BREAKDOWN:")
     print(f"  Improved samples: {results['improvements']} ({results['improvement_rate']:.1%})")
     print(f"  Degraded samples: {results['degradations']} ({results['degradation_rate']:.1%})")
     print(f"  Net success rate: {results['net_improvement_rate']:+.1%}")
     
-    print(f"\n⚡ PERFORMANCE:")
+    print(f"\n PERFORMANCE:")
     print(f"  Total time: {results['inference_time']:.2f}s")
     print(f"  Time per sample: {results['time_per_sample']*1000:.1f}ms")
     
@@ -318,17 +317,6 @@ def _print_tta_summary(results: Dict[str, Any]) -> None:
     slowdown = results['time_per_sample'] / baseline_time_estimate if baseline_time_estimate > 0 else results['num_augmentations']
     print(f"  Estimated slowdown: {slowdown:.1f}x")
     
-    # Raccomandazione
-    if results['accuracy_improvement'] > 0.01:
-        recommendation = "✅ Significant improvement - Highly recommended"
-    elif results['accuracy_improvement'] > 0.005:
-        recommendation = "⚠️ Moderate improvement - Consider based on computational cost"
-    elif results['accuracy_improvement'] > 0:
-        recommendation = "📊 Minimal improvement - Limited practical benefit"
-    else:
-        recommendation = "❌ No improvement or degradation - Not recommended"
-    
-    print(f"\n💡 RECOMMENDATION: {recommendation}")
     print(f"{'='*60}")
 
 
@@ -350,7 +338,7 @@ def evaluate_tta_detailed_analysis(classifier_model: torch.nn.Module,
     Returns:
         Dict con analisi dettagliata dei risultati TTA
     """
-    print(f"🔬 Starting detailed TTA analysis...")
+    print(f" Starting detailed TTA analysis...")
     
     # Esegui valutazione TTA standard
     results = evaluate_tta(
@@ -407,7 +395,7 @@ def evaluate_tta_detailed_analysis(classifier_model: torch.nn.Module,
     
     results['detailed_analysis'] = detailed_analysis
     
-    print(f"\n🔍 DETAILED CONFIDENCE ANALYSIS:")
+    print(f"\n DETAILED CONFIDENCE ANALYSIS:")
     print(f"  High confidence samples ({confidence_threshold}+): {len(high_conf_improvements)}")
     print(f"  Avg improvement (high conf): {detailed_analysis['high_conf_avg_improvement']:+.4f}")
     print(f"  Low confidence samples (<{confidence_threshold}): {len(low_conf_improvements)}")
@@ -432,13 +420,13 @@ def compare_tta_configurations(classifier_model: torch.nn.Module,
     Returns:
         Dict con confronto tra configurazioni TTA
     """
-    print(f"🔍 Comparing TTA configurations...")
+    print(f" Comparing TTA configurations...")
     
     results = {'configurations': []}
     
     # Configurazione 1: Solo ttach (se disponibile)
     if TTA_AVAILABLE:
-        print("📋 Testing ttach configuration...")
+        print(" Testing ttach configuration...")
         ttach_results = evaluate_tta(
             classifier_model=classifier_model,
             test_dataset=test_dataset,
@@ -451,7 +439,7 @@ def compare_tta_configurations(classifier_model: torch.nn.Module,
         results['configurations'].append(ttach_results)
     
     # Configurazione 2: Implementazione manuale
-    print("📋 Testing manual TTA configuration...")
+    print(" Testing manual TTA configuration...")
     manual_results = evaluate_tta(
         classifier_model=classifier_model,
         test_dataset=test_dataset,
@@ -483,7 +471,7 @@ def compare_tta_configurations(classifier_model: torch.nn.Module,
                   f"{config['time_per_sample']*1000:<12.1f} "
                   f"{config['num_augmentations']:<5}")
         
-        print(f"\n🏆 BEST CONFIG: {best_config['config_name']}")
+        print(f"\n BEST CONFIG: {best_config['config_name']}")
         print(f"  Accuracy improvement: {best_config['accuracy_improvement']:+.4f}")
         print(f"  Augmentations: {best_config['num_augmentations']}")
     
@@ -506,7 +494,7 @@ def evaluate_tta_efficiency(classifier_model: torch.nn.Module,
     Returns:
         Dict con analisi di efficienza
     """
-    print(f"⚡ Evaluating TTA efficiency...")
+    print(f" Evaluating TTA efficiency...")
     
     # Misura tempo baseline
     baseline_times = []
@@ -554,17 +542,7 @@ def evaluate_tta_efficiency(classifier_model: torch.nn.Module,
         'num_augmentations': tta_results['num_augmentations']
     }
     
-    # Valutazione efficienza
-    if efficiency_score > 0.01:
-        efficiency_rating = "🟢 Highly Efficient"
-    elif efficiency_score > 0.005:
-        efficiency_rating = "🟡 Moderately Efficient"  
-    elif efficiency_score > 0.001:
-        efficiency_rating = "🟠 Low Efficiency"
-    else:
-        efficiency_rating = "🔴 Inefficient"
-    
-    efficiency_results['efficiency_rating'] = efficiency_rating
+
     
     print(f"\n⚡ EFFICIENCY ANALYSIS:")
     print(f"  Baseline time: {avg_baseline_time*1000:.1f}ms")
@@ -572,7 +550,6 @@ def evaluate_tta_efficiency(classifier_model: torch.nn.Module,
     print(f"  Slowdown: {slowdown_factor:.1f}x")
     print(f"  Accuracy gain: {tta_results['accuracy_improvement']:+.4f}")
     print(f"  Efficiency score: {efficiency_score:.6f}")
-    print(f"  Rating: {efficiency_rating}")
     
     return efficiency_results
 
@@ -601,12 +578,12 @@ def run_tta_evaluation(classifier_path: str = './checkpoint/ckpt.pth',
     
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    print(f"🚀 Running complete TTA evaluation...")
-    print(f"📁 Classifier: {classifier_path}")
-    print(f"📁 Data root: {data_root}")
-    print(f"🔬 Samples: {num_samples}")
-    print(f"💻 Device: {device}")
+
+    print(f" Running complete TTA evaluation...")
+    print(f" Classifier: {classifier_path}")
+    print(f" Data root: {data_root}")
+    print(f" Samples: {num_samples}")
+    print(f" Device: {device}")
     
     # Carica modello
     classifier = load_classifier(classifier_path, device)
@@ -646,10 +623,10 @@ if __name__ == '__main__':
             device=device
         )
         
-        print(f"\n🎉 TTA evaluation completed!")
-        print(f"📊 Accuracy improvement: {results['accuracy_improvement']:+.4f}")
-        print(f"🔍 Confidence change: {results['avg_confidence_improvement']:+.4f}")
-        print(f"⚡ Method used: {results['method_used']}")
+        print(f"\n TTA evaluation completed!")
+        print(f" Accuracy improvement: {results['accuracy_improvement']:+.4f}")
+        print(f" Confidence change: {results['avg_confidence_improvement']:+.4f}")
+        print(f" Method used: {results['method_used']}")
         
         # Test confronto configurazioni se possibile
         from core.model_loader import load_classifier
@@ -658,7 +635,7 @@ if __name__ == '__main__':
         classifier = load_classifier('./checkpoint/ckpt.pth', device)
         test_dataset = get_cifar10_test_dataset('./data')
         
-        print(f"\n🔍 Testing configuration comparison...")
+        print(f"\n Testing configuration comparison...")
         comparison_results = compare_tta_configurations(
             classifier_model=classifier,
             test_dataset=test_dataset,
@@ -666,7 +643,7 @@ if __name__ == '__main__':
             num_samples=200
         )
         
-        print(f"\n⚡ Testing efficiency analysis...")
+        print(f"\n Testing efficiency analysis...")
         efficiency_results = evaluate_tta_efficiency(
             classifier_model=classifier,
             test_dataset=test_dataset,
@@ -675,5 +652,5 @@ if __name__ == '__main__':
         )
         
     except Exception as e:
-        print(f"❌ Error during evaluation: {e}")
+        print(f" Error during evaluation: {e}")
         print("Make sure the classifier and data are available at the specified paths.")

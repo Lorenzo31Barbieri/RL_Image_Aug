@@ -223,34 +223,33 @@ def print_evaluation_summary(results: Dict[str, Any],
     
     # Metriche principali
     if 'accuracy' in results:
-        print(f"📊 Accuracy: {results['accuracy']:.4f}")
+        print(f"Accuracy: {results['accuracy']:.4f}")
     
     if 'avg_confidence' in results:
-        print(f"🔍 Average Confidence: {results['avg_confidence']:.4f}")
+        print(f"Average Confidence: {results['avg_confidence']:.4f}")
     
     if 'f1_score' in results:
-        print(f"📈 F1-Score: {results['f1_score']:.4f}")
+        print(f"F1-Score: {results['f1_score']:.4f}")
     
     # Metriche temporali
     if 'inference_time' in results:
-        print(f"⏱️  Total Time: {results['inference_time']:.2f}s")
+        print(f"Total Time: {results['inference_time']:.2f}s")
     
     if 'time_per_sample' in results:
-        print(f"🚀 Time per Sample: {results['time_per_sample']*1000:.1f}ms")
+        print(f"Time per Sample: {results['time_per_sample']*1000:.1f}ms")
     
     # Metriche di miglioramento (se presenti)
     if 'accuracy_improvement' in results:
-        improvement_sign = "📈" if results['accuracy_improvement'] > 0 else "📉" if results['accuracy_improvement'] < 0 else "➡️"
-        print(f"{improvement_sign} Accuracy Improvement: {results['accuracy_improvement']:+.4f}")
+        print(f"Accuracy Improvement: {results['accuracy_improvement']:+.4f}")
     
     if 'improvements' in results and 'degradations' in results:
-        print(f"✅ Improvements: {results['improvements']}")
-        print(f"❌ Degradations: {results['degradations']}")
+        print(f"Improvements: {results['improvements']}")
+        print(f"Degradations: {results['degradations']}")
         if 'improvement_rate' in results:
-            print(f"📊 Net Success Rate: {results.get('net_improvement_rate', 0):.1%}")
+            print(f"Net Success Rate: {results.get('net_improvement_rate', 0):.1%}")
     
     if detailed and 'confusion_matrix' in results:
-        print(f"\n📋 Confusion Matrix:\n{results['confusion_matrix']}")
+        print(f"\nConfusion Matrix:\n{results['confusion_matrix']}")
     
     print(f"{'='*50}")
 
@@ -273,7 +272,7 @@ def validate_evaluation_inputs(model: Optional[torch.nn.Module] = None,
         if not isinstance(model, torch.nn.Module):
             raise ValueError("Model must be a PyTorch nn.Module")
         if not next(model.parameters()).is_cuda and device and device.type == 'cuda':
-            print("⚠️ Warning: Model is not on CUDA but device is CUDA")
+            print("Warning: Model is not on CUDA but device is CUDA")
     
     if dataloader is not None:
         if not isinstance(dataloader, torch.utils.data.DataLoader):
@@ -328,4 +327,4 @@ def save_evaluation_results(results: Dict[str, Any],
         with open(filepath, 'wb') as f:
             pickle.dump(output_data, f)
     
-    print(f"💾 Results saved to {filepath}")
+    print(f"Results saved to {filepath}")

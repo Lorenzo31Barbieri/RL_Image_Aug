@@ -28,7 +28,6 @@ def apply_color_jitter(img, brightness=0.1, contrast=0.1, saturation=0.1):
     return img
 
 
-# Improved action map with more suitable transformations for CIFAR-10
 _ACTIONS_MAP = {
     # Brightness adjustments (milder)
     0: (lambda img: TF.adjust_brightness(img, brightness_factor=1.1), "Brightness +10%"),
@@ -110,7 +109,7 @@ ACTION_CATEGORIES = {
     'contrast': [2, 3],
     'saturation': [4, 5],
     'rotation': [6, 7],
-    'spatial': [8, 9, 12],  # spatial transformations
+    'spatial': [8, 9, 12],
     'noise': [10],
     'color': [11],
     'sharpness': [13, 14],

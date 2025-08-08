@@ -45,10 +45,10 @@ class OutputManager:
         # Generate text report
         self._generate_text_report(results, config, timestamp)
         
-        print(f"💾 Results saved:")
-        print(f"  📊 Complete data: {pickle_file}")
-        print(f"  📄 Summary: {json_file}")
-        print(f"  📋 Report: {self.reports_dir}/report_{timestamp}.txt")
+        print(f" Results saved:")
+        print(f"   Complete data: {pickle_file}")
+        print(f"   Summary: {json_file}")
+        print(f"   Report: {self.reports_dir}/report_{timestamp}.txt")
     
     def _create_summary(self, results: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
         """Create a JSON-serializable summary of results."""
@@ -183,13 +183,13 @@ class OutputManager:
             # Method-specific recommendations
             for method, improvement in improvements.items():
                 if improvement > 0.01:
-                    recommendations.append(f"✅ {method}: Highly recommended (substantial gain)")
+                    recommendations.append(f" {method}: Highly recommended (substantial gain)")
                 elif improvement > 0.005:
-                    recommendations.append(f"⚠️  {method}: Consider for critical accuracy scenarios")
+                    recommendations.append(f"  {method}: Consider for critical accuracy scenarios")
                 elif improvement > 0:
-                    recommendations.append(f"📊 {method}: Limited practical benefit")
+                    recommendations.append(f" {method}: Limited practical benefit")
                 else:
-                    recommendations.append(f"❌ {method}: Not recommended (no improvement)")
+                    recommendations.append(f" {method}: Not recommended (no improvement)")
         else:
             recommendations.append("No improvement data available for comparison")
         
@@ -197,11 +197,11 @@ class OutputManager:
     
     def print_file_locations(self) -> None:
         """Print the locations of generated files."""
-        print(f"\n📁 OUTPUT LOCATIONS:")
-        print(f"  📊 Plots: {self.plots_dir}/")
-        print(f"  🖼️  Images: {self.images_dir}/")
-        print(f"  📋 Reports: {self.reports_dir}/")
-        print(f"  💾 Raw Data: {self.output_dir}/*.pkl")
+        print(f"\n OUTPUT LOCATIONS:")
+        print(f"   Plots: {self.plots_dir}/")
+        print(f"    Images: {self.images_dir}/")
+        print(f"   Reports: {self.reports_dir}/")
+        print(f"   Raw Data: {self.output_dir}/*.pkl")
     
     def clean_old_results(self, keep_latest: int = 5) -> None:
         """Clean up old result files, keeping only the most recent ones."""
@@ -217,9 +217,9 @@ class OutputManager:
                 for old_file in files[keep_latest:]:
                     try:
                         old_file.unlink()
-                        print(f"🗑️  Cleaned up old file: {old_file.name}")
+                        print(f"  Cleaned up old file: {old_file.name}")
                     except Exception as e:
-                        print(f"⚠️  Could not remove {old_file.name}: {e}")
+                        print(f"  Could not remove {old_file.name}: {e}")
 
 
 class ResultsFormatter:
@@ -228,7 +228,7 @@ class ResultsFormatter:
     @staticmethod
     def format_accuracy_comparison(results: Dict[str, Any]) -> str:
         """Format accuracy comparison as a table."""
-        lines = ["📊 ACCURACY COMPARISON:", "-" * 40]
+        lines = [" ACCURACY COMPARISON:", "-" * 40]
         
         if 'baseline' in results:
             acc = results['baseline']['accuracy']
@@ -247,7 +247,7 @@ class ResultsFormatter:
         if 'rl' in results:
             acc = results['rl']['final_accuracy']
             imp = results['rl']['accuracy_improvement']
-            loaded = "✅" if results['rl'].get('model_loaded', False) else "⚠️"
+            loaded = "OK" if results['rl'].get('model_loaded', False) else "NO"
             lines.append(f"RL Agent:        {acc:.4f} ({imp:+.4f}) {loaded}")
         
         return "\n".join(lines)
@@ -255,7 +255,7 @@ class ResultsFormatter:
     @staticmethod
     def format_timing_comparison(results: Dict[str, Any]) -> str:
         """Format timing comparison as a table."""
-        lines = ["⚡ TIMING COMPARISON:", "-" * 40]
+        lines = [" TIMING COMPARISON:", "-" * 40]
         
         baseline_time = None
         if 'baseline' in results:
@@ -298,13 +298,13 @@ class ResultsFormatter:
             # Best method recommendation
             best_method, best_improvement = sorted_methods[0]
             if best_improvement > 0.01:
-                lines.append(f"\n✅ Recommendation: Use {best_method} (significant improvement)")
+                lines.append(f"\n Recommendation: Use {best_method} (significant improvement)")
             elif best_improvement > 0.005:
-                lines.append(f"\n⚠️  Recommendation: Consider {best_method} for critical scenarios")
+                lines.append(f"\n  Recommendation: Consider {best_method} for critical scenarios")
             elif best_improvement > 0:
-                lines.append(f"\n📊 Recommendation: {best_method} shows minimal benefit")
+                lines.append(f"\n Recommendation: {best_method} shows minimal benefit")
             else:
-                lines.append(f"\n❌ Recommendation: No method shows clear improvement")
+                lines.append(f"\n Recommendation: No method shows clear improvement")
         else:
             lines.append("No improvement data available")
         

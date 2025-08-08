@@ -95,32 +95,32 @@ class ConfigManager:
         
         # Print warnings
         for warning in warnings:
-            print(f"⚠️  {warning}")
+            print(f"  {warning}")
         
         return len(errors) == 0, errors
     
     @staticmethod
     def print_config_summary(config: EvaluationConfig) -> None:
         """Print a formatted configuration summary."""
-        print("📋 EVALUATION CONFIGURATION")
+        print(" EVALUATION CONFIGURATION")
         print("-" * 40)
         
-        print("🏗️  Model Paths:")
+        print("  Model Paths:")
         print(f"  Classifier: {config.classifier_path}")
         print(f"  RL Model: {config.rl_model_path}")
         print(f"  Data Root: {config.data_root}")
         
-        print("\n⚙️  Evaluation Parameters:")
+        print("\n  Evaluation Parameters:")
         print(f"  Batch Size: {config.batch_size}")
         print(f"  TTA Samples: {config.tta_samples}")
         print(f"  RL Episodes: {config.rl_episodes}")
         print(f"  Max Steps/Episode: {config.max_steps_per_episode}")
         
         print("\n🔧 Methods Enabled:")
-        print(f"  Baseline: {'✅' if config.evaluate_baseline else '❌'}")
-        print(f"  Fixed Aug: {'✅' if config.evaluate_fixed_aug else '❌'}")
-        print(f"  TTA: {'✅' if config.evaluate_tta else '❌'}")
-        print(f"  RL Agent: {'✅' if config.evaluate_rl else '❌'}")
+        print(f"  Baseline: {'OK' if config.evaluate_baseline else 'NOT ENABLED'}")
+        print(f"  Fixed Aug: {'OK' if config.evaluate_fixed_aug else 'NOT ENABLED'}")
+        print(f"  TTA: {'OK' if config.evaluate_tta else 'NOT ENABLED'}")
+        print(f"  RL Agent: {'OK' if config.evaluate_rl else 'NOT ENABLED'}")
         
-        print(f"\n📁 Output: {config.output_dir}")
+        print(f"\n Output: {config.output_dir}")
         print("-" * 40)

@@ -76,12 +76,12 @@ def load_classifier(model_path: str = DEFAULT_CLASSIFIER_PATH,
         # Carica i pesi nel modello
         classifier_model.load_state_dict(new_state_dict, strict=True)
         
-        print(f"✅ Successfully loaded classifier from {model_path}")
+        print(f"Successfully loaded classifier from {model_path}")
         if accuracy_info != 'Unknown':
-            print(f"📊 Reported accuracy: {accuracy_info}")
+            print(f"Reported accuracy: {accuracy_info}")
         
     except Exception as e:
-        print(f"❌ Error loading classifier: {e}")
+        print(f"Error loading classifier: {e}")
         raise ValueError(f"Failed to load classifier from {model_path}: {e}")
     
     # Configura il modello per valutazione
@@ -89,7 +89,7 @@ def load_classifier(model_path: str = DEFAULT_CLASSIFIER_PATH,
     for param in classifier_model.parameters():
         param.requires_grad = False
     
-    print("🔒 Classifier loaded and frozen for evaluation")
+    print("Classifier loaded and frozen for evaluation")
     return classifier_model
 
 
@@ -118,7 +118,7 @@ def load_rl_agent(model_path: str = DEFAULT_RL_MODEL_PATH,
             from src.environment.transforms import get_num_actions
             action_dim = get_num_actions()
         except ImportError:
-            print("⚠️ Warning: Could not import get_num_actions, using default action_dim=12")
+            print("Warning: Could not import get_num_actions, using default action_dim=12")
             action_dim = 12
     
     print(f"Loading RL agent...")
@@ -145,14 +145,14 @@ def load_rl_agent(model_path: str = DEFAULT_RL_MODEL_PATH,
             agent.epsilon = 0  # Disabilita esplorazione per valutazione
             
             model_loaded = True
-            print(f"✅ Successfully loaded RL agent from {model_path}")
+            print(f"Successfully loaded RL agent from {model_path}")
             
         except Exception as e:
-            print(f"❌ Error loading RL agent: {e}")
-            print("📝 Using randomly initialized agent for comparison...")
+            print(f"Error loading RL agent: {e}")
+            print("Using randomly initialized agent for comparison...")
     else:
-        print(f"❌ RL model not found at {model_path}")
-        print("📝 Using randomly initialized agent for comparison...")
+        print(f"RL model not found at {model_path}")
+        print("Using randomly initialized agent for comparison...")
     
     # Assicurati che epsilon sia 0 per valutazione
     agent.epsilon = 0
@@ -202,11 +202,11 @@ def validate_model_compatibility(classifier: torch.nn.Module,
     Raises:
         ValueError: Se i modelli non sono compatibili
     """
-    print("🔍 Validating model compatibility...")
+    print("Validating model compatibility...")
     
     # Valida il classificatore
     classifier_info = get_model_info(classifier)
-    print(f"📊 Classifier info: {classifier_info['model_type']} with {classifier_info['total_parameters']:,} parameters")
+    print(f"Classifier info: {classifier_info['model_type']} with {classifier_info['total_parameters']:,} parameters")
     
     # Testa il classificatore con input dummy
     try:
@@ -217,7 +217,7 @@ def validate_model_compatibility(classifier: torch.nn.Module,
         if output.shape[1] != expected_num_classes:
             raise ValueError(f"Classifier output shape {output.shape[1]} doesn't match expected classes {expected_num_classes}")
         
-        print(f"✅ Classifier validation passed - output shape: {output.shape}")
+        print(f"Classifier validation passed - output shape: {output.shape}")
         
     except Exception as e:
         raise ValueError(f"Classifier validation failed: {e}")
@@ -225,7 +225,7 @@ def validate_model_compatibility(classifier: torch.nn.Module,
     # Valida l'agente RL se fornito
     if agent is not None:
         agent_info = get_model_info(agent.q_network)
-        print(f"🤖 RL Agent info: {agent_info['model_type']} with {agent_info['total_parameters']:,} parameters")
+        print(f"RL Agent info: {agent_info['model_type']} with {agent_info['total_parameters']:,} parameters")
         
         # Testa l'agente con stato dummy
         try:
@@ -236,12 +236,12 @@ def validate_model_compatibility(classifier: torch.nn.Module,
             if q_values.shape[1] != agent.action_dim:
                 raise ValueError(f"Agent output shape {q_values.shape[1]} doesn't match expected actions {agent.action_dim}")
             
-            print(f"✅ RL Agent validation passed - Q-values shape: {q_values.shape}")
+            print(f"RL Agent validation passed - Q-values shape: {q_values.shape}")
             
         except Exception as e:
             raise ValueError(f"RL Agent validation failed: {e}")
     
-    print("🎉 All models validated successfully!")
+    print("All models validated successfully!")
 
 
 def print_loading_summary(classifier: torch.nn.Module,
@@ -261,21 +261,21 @@ def print_loading_summary(classifier: torch.nn.Module,
     
     # Info classificatore
     classifier_info = get_model_info(classifier)
-    print(f"🎯 CLASSIFIER ({classifier_info['model_type']}):")
-    print(f"  ✅ Status: Loaded and ready")
-    print(f"  📊 Parameters: {classifier_info['total_parameters']:,}")
-    print(f"  🔒 Training mode: {'ON' if classifier_info['is_training'] else 'OFF (Evaluation)'}")
-    print(f"  💻 Device: {classifier_info['model_device']}")
+    print(f" CLASSIFIER ({classifier_info['model_type']}):")
+    print(f"  Status: Loaded and ready")
+    print(f"  Parameters: {classifier_info['total_parameters']:,}")
+    print(f"  Training mode: {'ON' if classifier_info['is_training'] else 'OFF (Evaluation)'}")
+    print(f"  Device: {classifier_info['model_device']}")
     
     # Info agente RL
     if agent is not None:
         agent_info = get_model_info(agent.q_network)
-        status = "✅ Loaded from checkpoint" if agent_loaded else "⚠️ Random initialization"
-        print(f"\n🤖 RL AGENT ({agent_info['model_type']}):")
+        status = " Loaded from checkpoint" if agent_loaded else "⚠️ Random initialization"
+        print(f"\n RL AGENT ({agent_info['model_type']}):")
         print(f"  {status}")
-        print(f"  📊 Parameters: {agent_info['total_parameters']:,}")
-        print(f"  🎯 State dim: {agent.state_dim}, Action dim: {agent.action_dim}")
-        print(f"  🔍 Epsilon: {agent.epsilon} (exploration disabled)")
-        print(f"  💻 Device: {agent_info['model_device']}")
+        print(f"   Parameters: {agent_info['total_parameters']:,}")
+        print(f"   State dim: {agent.state_dim}, Action dim: {agent.action_dim}")
+        print(f"   Epsilon: {agent.epsilon} (exploration disabled)")
+        print(f"   Device: {agent_info['model_device']}")
     
     print(f"{'='*60}")

@@ -52,10 +52,10 @@ def evaluate_baseline(classifier_model: torch.nn.Module,
     validate_evaluation_inputs(classifier_model, test_loader, device)
     
     if verbose:
-        print(f"🎯 Starting baseline evaluation...")
-        print(f"📊 Dataset size: {len(test_loader.dataset)} samples")
-        print(f"📦 Batch size: {test_loader.batch_size}")
-        print(f"💻 Device: {device}")
+        print(f" Starting baseline evaluation...")
+        print(f" Dataset size: {len(test_loader.dataset)} samples")
+        print(f" Batch size: {test_loader.batch_size}")
+        print(f" Device: {device}")
     
     with time_evaluation_context("BASELINE"):
         # Usa la funzione core per valutazione
@@ -140,7 +140,7 @@ def evaluate_baseline_with_confidence_analysis(classifier_model: torch.nn.Module
     
     results['confidence_analysis'] = confidence_analysis
     
-    print(f"\n🔍 CONFIDENCE ANALYSIS:")
+    print(f"\n CONFIDENCE ANALYSIS:")
     print(f"  Threshold: {confidence_threshold}")
     print(f"  High confidence samples: {len(high_conf_indices)} ({confidence_analysis['high_confidence_ratio']:.1%})")
     print(f"  High confidence accuracy: {high_conf_accuracy:.4f}")
@@ -169,7 +169,7 @@ def quick_baseline_check(classifier_model: torch.nn.Module,
     """
     validate_evaluation_inputs(classifier_model, test_loader, device)
     
-    print(f"🚀 Quick baseline check (max {max_batches} batches)...")
+    print(f" Quick baseline check (max {max_batches} batches)...")
     
     classifier_model.eval()
     correct = 0
@@ -204,7 +204,7 @@ def quick_baseline_check(classifier_model: torch.nn.Module,
         'method': 'baseline_quick'
     }
     
-    print(f"✅ Quick check complete:")
+    print(f" Quick check complete:")
     print(f"  Processed: {total} samples ({results['batches_processed']} batches)")
     print(f"  Accuracy: {accuracy:.4f}")
     print(f"  Avg Confidence: {avg_confidence:.4f}")
@@ -237,10 +237,10 @@ def run_baseline_evaluation(classifier_path: str = './checkpoint/ckpt.pth',
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    print(f"🚀 Running complete baseline evaluation...")
-    print(f"📁 Classifier: {classifier_path}")
-    print(f"📁 Data root: {data_root}")
-    print(f"💻 Device: {device}")
+    print(f" Running complete baseline evaluation...")
+    print(f" Classifier: {classifier_path}")
+    print(f" Data root: {data_root}")
+    print(f" Device: {device}")
     
     # Carica modello
     classifier = load_classifier(classifier_path, device)
@@ -282,10 +282,10 @@ if __name__ == '__main__':
             device=device
         )
         
-        print(f"\n🎉 Baseline evaluation completed successfully!")
-        print(f"📊 Final accuracy: {results['accuracy']:.4f}")
-        print(f"🔍 Average confidence: {results['avg_confidence']:.4f}")
+        print(f"\n Baseline evaluation completed successfully!")
+        print(f" Final accuracy: {results['accuracy']:.4f}")
+        print(f" Average confidence: {results['avg_confidence']:.4f}")
         
     except Exception as e:
-        print(f"❌ Error during evaluation: {e}")
+        print(f" Error during evaluation: {e}")
         print("Make sure the classifier and data are available at the specified paths.")

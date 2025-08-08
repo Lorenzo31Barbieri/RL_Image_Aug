@@ -106,7 +106,7 @@ def validate_config(config):
     if config['rl_episodes'] <= 0:
         raise ValueError("rl_episodes must be positive")
     
-    print("✅ Configuration validated successfully")
+    print("Configuration validated successfully")
 
 
 def print_config(config):
@@ -116,25 +116,25 @@ def print_config(config):
     Args:
         config: Dizionario di configurazione
     """
-    print("📋 Evaluation Configuration:")
+    print("Evaluation Configuration:")
     print("-" * 40)
     
-    print("🏗️  Model Paths:")
+    print("Model Paths:")
     print(f"  Classifier: {config.get('classifier_path', 'Not set')}")
     print(f"  RL Model: {config.get('rl_model_path', 'Not set')}")
     print(f"  Data Root: {config.get('data_root', 'Not set')}")
     
-    print("\n⚙️  Evaluation Parameters:")
+    print("\nEvaluation Parameters:")
     print(f"  Batch Size: {config.get('batch_size', 'Not set')}")
     print(f"  TTA Samples: {config.get('tta_samples', 'Not set')}")
     print(f"  RL Episodes: {config.get('rl_episodes', 'Not set')}")
     print(f"  Max Steps per Episode: {config.get('max_steps_per_episode', 'Not set')}")
     
-    print("\n🔧 Methods Enabled:")
-    print(f"  Baseline: {'✅' if config.get('evaluate_baseline', False) else '❌'}")
-    print(f"  Fixed Augmentation: {'✅' if config.get('evaluate_fixed_aug', False) else '❌'}")
-    print(f"  TTA: {'✅' if config.get('evaluate_tta', False) else '❌'}")
-    print(f"  RL Agent: {'✅' if config.get('evaluate_rl', False) else '❌'}")
+    print("\nMethods Enabled:")
+    print(f"  Baseline: {'OK' if config.get('evaluate_baseline', False) else 'NOT ENABLED'}")
+    print(f"  Fixed Augmentation: {'OK' if config.get('evaluate_fixed_aug', False) else 'NOT ENABLED'}")
+    print(f"  TTA: {'OK' if config.get('evaluate_tta', False) else 'NOT ENABLED'}")
+    print(f"  RL Agent: {'OK' if config.get('evaluate_rl', False) else 'NOT ENABLED'}")
     
-    print(f"\n📁 Output: {config.get('output_dir', 'Not set')}")
+    print(f"\nOutput: {config.get('output_dir', 'Not set')}")
     print("-" * 40)
