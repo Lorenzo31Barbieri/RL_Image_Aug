@@ -16,8 +16,11 @@ from evaluation.core.evaluation_core import (
 
 
 def evaluate_baseline(classifier_model: torch.nn.Module,
-                     test_loader: torch.utils.data.DataLoader,
-                     device: torch.device,
+                     test_loader: torch.utils.data.DataLoader = None,
+                     test_dataset: torch.utils.data.Dataset = None,
+                     device: torch.device = None,
+                     num_samples: int = None,
+                     batch_size: int = 64,
                      verbose: bool = True,
                      return_details: bool = True) -> Dict[str, Any]:
     """
@@ -25,29 +28,28 @@ def evaluate_baseline(classifier_model: torch.nn.Module,
     
     Args:
         classifier_model: Modello classificatore pre-trained
-        test_loader: DataLoader per i dati di test
+        test_loader: DataLoader per i dati di test (if None, created from test_dataset)
+        test_dataset: Dataset di test (used if test_loader is None)
         device: Device per computazione
+        num_samples: Number of samples to evaluate (None = all)
+        batch_size: Batch size if creating new loader
         verbose: Se stampare informazioni dettagliate
         return_details: Se restituire predizioni e label individuali
     
     Returns:
-        Dict con risultati della valutazione:
-        - accuracy: Accuratezza complessiva
-        - avg_confidence: Confidenza media
-        - f1_score: F1-score pesato
-        - avg_loss: Loss medio
-        - inference_time: Tempo totale di inferenza
-        - time_per_sample: Tempo per campione
-        - predictions: Lista predizioni (se return_details=True)
-        - labels: Lista label vere (se return_details=True)
-        - confidences: Lista confidenze (se return_details=True)
-        - confusion_matrix: Matrice di confusione
-        - total_samples: Numero totale di campioni
-    
-    Raises:
-        ValueError: Se gli input non sono validi
+        Dict con risultati della valutazione
     """
-    # Validazione input
+    # Create subset loader if num_samples specified
+    if num_samples is not None and test_dataset is not None:
+        from evaluation.core.data_utils import create_sample_subset
+        from torch.utils.data import DataLoader
+        
+        subset = create_sample_subset(test_dataset, num_samples, random_seed=42)
+        test_loader = DataLoader(subset, batch_size=batch_size, shuffle=False, num_workers=0)
+        
+        if verbose:
+            print(f" Created subset with {num_samples} samples")
+    
     validate_evaluation_inputs(classifier_model, test_loader, device)
     
     if verbose:
@@ -69,7 +71,8 @@ def evaluate_baseline(classifier_model: torch.nn.Module,
         results.update({
             'method': 'baseline',
             'augmentation_applied': False,
-            'model_type': type(classifier_model).__name__
+            'model_type': type(classifier_model).__name__,
+            'samples_evaluated': len(test_loader.dataset)
         })
         
         if verbose:

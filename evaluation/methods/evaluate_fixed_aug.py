@@ -24,6 +24,7 @@ def evaluate_fixed_augmentation(classifier_model: torch.nn.Module,
                                test_dataset: torch.utils.data.Dataset,
                                augmentation_ids: List[int],
                                device: torch.device,
+                               num_samples: int = None,
                                batch_size: int = 64,
                                verbose: bool = True) -> Dict[str, Any]:
     """
@@ -34,25 +35,22 @@ def evaluate_fixed_augmentation(classifier_model: torch.nn.Module,
         test_dataset: Dataset di test (senza trasformazioni)
         augmentation_ids: Lista di ID delle trasformazioni da applicare
         device: Device per computazione
+        num_samples: Number of samples to evaluate (None = all)
         batch_size: Dimensione del batch
         verbose: Se stampare informazioni dettagliate
     
     Returns:
-        Dict con risultati della valutazione fixed augmentation:
-        - accuracy: Accuratezza con augmentation
-        - avg_confidence: Confidenza media con augmentation
-        - f1_score: F1-score con augmentation
-        - augmentation_ids: ID delle trasformazioni applicate
-        - augmentation_names: Nomi delle trasformazioni
-        - inference_time: Tempo di inferenza
-        - time_per_sample: Tempo per campione
-        - method: 'fixed_augmentation'
-        - total_samples: Numero campioni valutati
-        - predictions: Lista predizioni (per confusion matrix)
-        - labels: Lista label vere (per confusion matrix)
-        - confidences: Lista confidenze
+        Dict con risultati della valutazione fixed augmentation
     """
     validate_evaluation_inputs(classifier_model, device=device)
+    
+    # Create subset if num_samples specified
+    if num_samples is not None:
+        from evaluation.core.data_utils import create_sample_subset
+        test_dataset = create_sample_subset(test_dataset, num_samples, random_seed=42)
+        
+        if verbose:
+            print(f" Created subset with {num_samples} samples")
     
     if verbose:
         print(f" Starting fixed augmentation evaluation...")
@@ -90,7 +88,8 @@ def evaluate_fixed_augmentation(classifier_model: torch.nn.Module,
             'augmentation_ids': augmentation_ids,
             'augmentation_names': augmentation_names,
             'method': 'fixed_augmentation',
-            'total_samples': len(test_dataset)
+            'total_samples': len(test_dataset),
+            'samples_evaluated': len(test_dataset)
         })
         
         if verbose:

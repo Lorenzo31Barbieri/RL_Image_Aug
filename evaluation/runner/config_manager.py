@@ -23,6 +23,8 @@ class EvaluationConfig:
     
     # Evaluation parameters  
     batch_size: int = 64
+    baseline_samples: int = 10000
+    fixed_aug_samples: int = 10000
     tta_samples: int = 1000
     rl_episodes: int = 1000
     max_steps_per_episode: int = 3

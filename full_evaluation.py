@@ -5,7 +5,7 @@ COMPREHENSIVE MODEL EVALUATION
 
 Streamlined main script for comprehensive model evaluation.
 
-Usage: python full_evaluation_refactored.py [--quick] [--config CONFIG_FILE]
+Usage: python full_evaluation.py [--quick] [--config CONFIG_FILE]
 """
 
 import sys
@@ -29,10 +29,10 @@ def parse_arguments():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python full_evaluation_refactored.py                    # Interactive mode
-  python full_evaluation_refactored.py --quick           # Quick evaluation
-  python full_evaluation_refactored.py --non-interactive # Use defaults
-  python full_evaluation_refactored.py --tta-samples 500 # Custom TTA samples
+  python full_evaluation.py                               # Interactive mode
+  python full_evaluation.py --quick                      # Quick evaluation
+  python full_evaluation.py --baseline-samples 5000     # Custom baseline samples
+  python full_evaluation.py --fixed-aug-samples 3000    # Custom fixed aug samples
         """
     )
     
@@ -43,6 +43,10 @@ Examples:
                        help='Run with default configuration without prompts')
     
     # Custom parameters
+    parser.add_argument('--baseline-samples', type=int, metavar='N',
+                       help='Number of samples for baseline evaluation')
+    parser.add_argument('--fixed-aug-samples', type=int, metavar='N',
+                       help='Number of samples for fixed augmentation evaluation')
     parser.add_argument('--tta-samples', type=int, metavar='N',
                        help='Number of samples for TTA evaluation')
     parser.add_argument('--rl-episodes', type=int, metavar='N',
@@ -79,6 +83,10 @@ def create_config_from_args(args) -> EvaluationConfig:
         config = ConfigManager.create_default_config()
     
     # Apply custom parameters
+    if args.baseline_samples:
+        config.baseline_samples = args.baseline_samples
+    if args.fixed_aug_samples:
+        config.fixed_aug_samples = args.fixed_aug_samples
     if args.tta_samples:
         config.tta_samples = args.tta_samples
     if args.rl_episodes:
@@ -129,8 +137,20 @@ def main():
     if not validate_environment():
         sys.exit(1)
     
-    # Parse arguments
-    args = parse_arguments()
+    # Parse arguments with error handling
+    try:
+        args = parse_arguments()
+    except SystemExit as e:
+        # Handle --help or invalid arguments gracefully
+        sys.exit(e.code)
+    except Exception as e:
+        print(f"Error parsing arguments: {e}")
+        sys.exit(1)
+    
+    # Ensure args is not None
+    if args is None:
+        print("Error: Failed to parse arguments")
+        sys.exit(1)
     
     try:
         if args.non_interactive:
@@ -150,7 +170,8 @@ def main():
             print()
             
             # If specific args provided, create config and skip some prompts
-            if any([args.tta_samples, args.rl_episodes, args.batch_size, args.quick]):
+            if any([args.baseline_samples, args.fixed_aug_samples, args.tta_samples, 
+                   args.rl_episodes, args.batch_size, args.quick]):
                 config = create_config_from_args(args)
                 
                 # Show config and ask for confirmation

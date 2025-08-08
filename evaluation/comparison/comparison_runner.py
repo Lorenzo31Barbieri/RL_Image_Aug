@@ -131,21 +131,28 @@ class EvaluationComparison:
             raise
     
     def run_baseline_evaluation(self) -> None:
-        """Run baseline evaluation with detailed data for confusion matrix."""
+        """Run baseline evaluation with configurable samples."""
         print(f"\nRunning baseline evaluation...")
+        
+        num_samples = self.config.get('baseline_samples')
+        if num_samples and num_samples < len(self.test_dataset):
+            print(f"Using {num_samples} samples for baseline evaluation")
         
         self.results['baseline'] = evaluate_baseline(
             classifier_model=self.classifier,
-            test_loader=self.test_loader,
+            test_loader=self.test_loader if num_samples is None else None,
+            test_dataset=self.test_dataset,
             device=self.device,
+            num_samples=num_samples,
+            batch_size=self.config.get('batch_size', 64),
             verbose=True,
-            return_details=True  # Important: get detailed predictions
+            return_details=True
         )
         
         print(f"Baseline evaluation completed")
     
     def run_fixed_augmentation_evaluation(self) -> None:
-        """Run fixed augmentation evaluation."""
+        """Run fixed augmentation evaluation with configurable samples."""
         if not self.config.get('evaluate_fixed_aug', True):
             print("Skipping fixed augmentation evaluation")
             return
@@ -153,12 +160,17 @@ class EvaluationComparison:
         print(f"\nRunning fixed augmentation evaluation...")
         
         augmentation_ids = self.config.get('fixed_aug_ids', [0, 3, 6])
+        num_samples = self.config.get('fixed_aug_samples')
+        
+        if num_samples and num_samples < len(self.test_dataset):
+            print(f"Using {num_samples} samples for fixed augmentation evaluation")
         
         results = evaluate_fixed_augmentation(
             classifier_model=self.classifier,
             test_dataset=self.test_dataset,
             augmentation_ids=augmentation_ids,
             device=self.device,
+            num_samples=num_samples,
             batch_size=self.config.get('batch_size', 64),
             verbose=True
         )

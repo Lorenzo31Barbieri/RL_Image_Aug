@@ -92,6 +92,24 @@ class InteractiveRunner:
         
         try:
             # Ask for key parameters
+            baseline_samples = self._get_int_input(
+                f"Baseline samples (default {config.baseline_samples}): ",
+                default=config.baseline_samples,
+                min_val=100,
+                max_val=50000
+            )
+            if baseline_samples is not None:
+                config.baseline_samples = baseline_samples
+            
+            fixed_aug_samples = self._get_int_input(
+                f"Fixed aug samples (default {config.fixed_aug_samples}): ",
+                default=config.fixed_aug_samples,
+                min_val=100,
+                max_val=50000
+            )
+            if fixed_aug_samples is not None:
+                config.fixed_aug_samples = fixed_aug_samples
+            
             tta_samples = self._get_int_input(
                 f"TTA samples (default {config.tta_samples}): ",
                 default=config.tta_samples,
