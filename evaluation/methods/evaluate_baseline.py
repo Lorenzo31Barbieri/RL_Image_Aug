@@ -25,26 +25,13 @@ def evaluate_baseline(classifier_model: torch.nn.Module,
                      return_details: bool = True) -> Dict[str, Any]:
     """
     Valuta le performance del classificatore baseline senza augmentation.
-    
-    Args:
-        classifier_model: Modello classificatore pre-trained
-        test_loader: DataLoader per i dati di test (if None, created from test_dataset)
-        test_dataset: Dataset di test (used if test_loader is None)
-        device: Device per computazione
-        num_samples: Number of samples to evaluate (None = all)
-        batch_size: Batch size if creating new loader
-        verbose: Se stampare informazioni dettagliate
-        return_details: Se restituire predizioni e label individuali
-    
-    Returns:
-        Dict con risultati della valutazione
     """
     # Create subset loader if num_samples specified
     if num_samples is not None and test_dataset is not None:
         from evaluation.core.data_utils import create_sample_subset
         from torch.utils.data import DataLoader
         
-        subset = create_sample_subset(test_dataset, num_samples, random_seed=42)
+        subset = create_sample_subset(test_dataset, num_samples)  # Removed random_seed=42
         test_loader = DataLoader(subset, batch_size=batch_size, shuffle=False, num_workers=0)
         
         if verbose:

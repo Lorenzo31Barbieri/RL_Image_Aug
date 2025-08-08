@@ -29,25 +29,13 @@ def evaluate_fixed_augmentation(classifier_model: torch.nn.Module,
                                verbose: bool = True) -> Dict[str, Any]:
     """
     Valuta il classificatore SOLO con fixed augmentation.
-    
-    Args:
-        classifier_model: Modello classificatore pre-trained
-        test_dataset: Dataset di test (senza trasformazioni)
-        augmentation_ids: Lista di ID delle trasformazioni da applicare
-        device: Device per computazione
-        num_samples: Number of samples to evaluate (None = all)
-        batch_size: Dimensione del batch
-        verbose: Se stampare informazioni dettagliate
-    
-    Returns:
-        Dict con risultati della valutazione fixed augmentation
     """
     validate_evaluation_inputs(classifier_model, device=device)
     
     # Create subset if num_samples specified
     if num_samples is not None:
         from evaluation.core.data_utils import create_sample_subset
-        test_dataset = create_sample_subset(test_dataset, num_samples, random_seed=42)
+        test_dataset = create_sample_subset(test_dataset, num_samples)  # Removed random_seed=42
         
         if verbose:
             print(f" Created subset with {num_samples} samples")

@@ -105,21 +105,18 @@ def get_cifar10_test_loader(data_root: str = DEFAULT_DATA_ROOT,
 
 
 def create_sample_subset(dataset: torchvision.datasets.CIFAR10,
-                        num_samples: int,
-                        random_seed: Optional[int] = None) -> Subset:
+                        num_samples: int) -> Subset:  # Removed random_seed parameter
     """
     Crea un subset casuale del dataset.
     
     Args:
         dataset: Dataset originale
         num_samples: Numero di campioni da selezionare
-        random_seed: Seed per riproducibilità
     
     Returns:
         Subset del dataset
     """
-    if random_seed is not None:
-        np.random.seed(random_seed)
+    # Removed: if random_seed is not None: np.random.seed(random_seed)
     
     total_samples = len(dataset)
     if num_samples > total_samples:
@@ -131,6 +128,7 @@ def create_sample_subset(dataset: torchvision.datasets.CIFAR10,
     
     print(f"Created subset with {len(subset)} samples from {total_samples}")
     return subset
+
 
 
 def get_cifar10_class_names() -> List[str]:
@@ -221,8 +219,7 @@ def validate_dataset_compatibility(dataset: torchvision.datasets.CIFAR10) -> Non
 def create_evaluation_dataloader(data_root: str = DEFAULT_DATA_ROOT,
                                batch_size: int = 64,
                                num_samples: Optional[int] = None,
-                               random_seed: Optional[int] = 42,
-                               device_optimized: bool = True) -> Tuple[DataLoader, dict]:
+                               device_optimized: bool = True) -> Tuple[DataLoader, dict]:  # Removed random_seed parameter
     """
     Crea un DataLoader ottimizzato per valutazione.
     
@@ -230,18 +227,17 @@ def create_evaluation_dataloader(data_root: str = DEFAULT_DATA_ROOT,
         data_root: Directory root per i dati
         batch_size: Dimensione del batch
         num_samples: Numero di campioni (None per tutti)
-        random_seed: Seed per riproducibilità
         device_optimized: Se ottimizzare per GPU
     
     Returns:
         Tupla (DataLoader, info_dict)
     """
-    # Carica dataset completo
+    # Load dataset completo
     dataset = get_cifar10_test_dataset(data_root=data_root)
     
     # Crea subset se richiesto
     if num_samples is not None:
-        dataset = create_sample_subset(dataset, num_samples, random_seed)
+        dataset = create_sample_subset(dataset, num_samples)  # Removed random_seed argument
     
     # Analizza distribuzione
     distribution_info = analyze_dataset_distribution(dataset)
@@ -277,7 +273,6 @@ def create_evaluation_dataloader(data_root: str = DEFAULT_DATA_ROOT,
     print(f"  Pin memory: {pin_memory}")
     
     return dataloader, info
-
 
 def print_data_loading_summary(dataloader: DataLoader, info: dict) -> None:
     """

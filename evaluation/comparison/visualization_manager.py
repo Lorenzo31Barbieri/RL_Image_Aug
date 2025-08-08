@@ -415,7 +415,7 @@ class VisualizationManager:
         total_degradations = rl_results.get('degradations', 0)
         
         # Simulate realistic class-wise distribution
-        np.random.seed(42)  # For reproducibility
+        # Removed: np.random.seed(42)  # For reproducibility
         
         # Some classes are harder to improve than others
         class_difficulty = [0.8, 1.2, 1.5, 1.3, 1.1, 1.4, 0.9, 1.0, 0.7, 1.1]
