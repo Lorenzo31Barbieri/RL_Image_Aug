@@ -20,11 +20,9 @@ class OutputManager:
     def __init__(self, output_dir: str):
         self.output_dir = Path(output_dir)
         self.plots_dir = self.output_dir / 'plots'
-        self.images_dir = self.output_dir / 'improved_images'
-        self.reports_dir = self.output_dir / 'reports'
         
         # Create directories
-        for directory in [self.output_dir, self.plots_dir, self.images_dir, self.reports_dir]:
+        for directory in [self.output_dir, self.plots_dir]:
             directory.mkdir(parents=True, exist_ok=True)
     
     def save_results(self, results: Dict[str, Any], config: Dict[str, Any]) -> None:
@@ -48,7 +46,6 @@ class OutputManager:
         print(f" Results saved:")
         print(f"   Complete data: {pickle_file}")
         print(f"   Summary: {json_file}")
-        print(f"   Report: {self.reports_dir}/report_{timestamp}.txt")
     
     def _create_summary(self, results: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
         """Create a JSON-serializable summary of results."""
@@ -108,55 +105,7 @@ class OutputManager:
             }
         
         return summary
-    
-    def _generate_text_report(self, results: Dict[str, Any], config: Dict[str, Any], timestamp: str) -> None:
-        """Generate a comprehensive text report."""
-        report_file = self.reports_dir / f'report_{timestamp}.txt'
         
-        with open(report_file, 'w') as f:
-            f.write("COMPREHENSIVE MODEL EVALUATION REPORT\n")
-            f.write("=" * 60 + "\n\n")
-            
-            # Metadata
-            f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"Configuration: {config.get('output_dir', 'Unknown')}\n")
-            f.write(f"Methods Evaluated: {', '.join(results.keys())}\n\n")
-            
-            # Performance summary
-            f.write("PERFORMANCE SUMMARY\n")
-            f.write("-" * 30 + "\n")
-            
-            for method_name, method_results in results.items():
-                f.write(f"\n{method_name.upper().replace('_', ' ')}:\n")
-                
-                if method_name == 'baseline':
-                    f.write(f"  Accuracy: {method_results['accuracy']:.4f}\n")
-                    f.write(f"  Avg Confidence: {method_results.get('avg_confidence', 'N/A'):.4f}\n")
-                
-                elif method_name == 'fixed_aug':
-                    f.write(f"  Accuracy: {method_results['augmented_accuracy']:.4f}\n")
-                    f.write(f"  Improvement: {method_results['accuracy_improvement']:+.4f}\n")
-                
-                elif method_name == 'tta':
-                    f.write(f"  Accuracy: {method_results['tta_accuracy']:.4f}\n")
-                    f.write(f"  Improvement: {method_results['accuracy_improvement']:+.4f}\n")
-                    f.write(f"  Augmentations Used: {method_results.get('num_augmentations', 'N/A')}\n")
-                
-                elif method_name == 'rl':
-                    f.write(f"  Accuracy: {method_results['final_accuracy']:.4f}\n")
-                    f.write(f"  Improvement: {method_results['accuracy_improvement']:+.4f}\n")
-                    f.write(f"  Avg Reward: {method_results.get('avg_reward', 'N/A'):.3f}\n")
-                    f.write(f"  Model Loaded: {'Yes' if method_results.get('model_loaded', False) else 'No (Random)'}\n")
-                
-                # Timing info
-                time_per_sample = method_results.get('time_per_sample')
-                if time_per_sample:
-                    f.write(f"  Time per Sample: {time_per_sample * 1000:.1f}ms\n")
-            
-            # Recommendations
-            f.write(f"\n\nRECOMMENDATIONS\n")
-            f.write("-" * 30 + "\n")
-            f.write(self._generate_recommendations(results))
     
     def _generate_recommendations(self, results: Dict[str, Any]) -> str:
         """Generate method recommendations based on results."""
@@ -199,8 +148,6 @@ class OutputManager:
         """Print the locations of generated files."""
         print(f"\n OUTPUT LOCATIONS:")
         print(f"   Plots: {self.plots_dir}/")
-        print(f"    Images: {self.images_dir}/")
-        print(f"   Reports: {self.reports_dir}/")
         print(f"   Raw Data: {self.output_dir}/*.pkl")
     
     def clean_old_results(self, keep_latest: int = 5) -> None:
