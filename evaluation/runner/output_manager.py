@@ -12,6 +12,7 @@ import pickle
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+import numpy as np
 
 
 class OutputManager:
@@ -38,7 +39,8 @@ class OutputManager:
         summary = self._create_summary(results, config)
         json_file = self.output_dir / f'summary_{timestamp}.json'
         with open(json_file, 'w') as f:
-            json.dump(summary, f, indent=4, default=str)
+            # Use a custom encoder to handle numpy types
+            json.dump(summary, f, indent=4, cls=NpEncoder)
         
         # Generate text report
         self._generate_text_report(results, config, timestamp)
@@ -58,7 +60,7 @@ class OutputManager:
             'performance': {}
         }
         
-        # Extract key metrics for each method
+        # Extract key metrics for each method based on comparison_runner's output
         if 'baseline' in results:
             summary['performance']['baseline'] = {
                 'accuracy': results['baseline']['accuracy'],
@@ -67,24 +69,27 @@ class OutputManager:
             }
         
         if 'fixed_aug' in results:
+            # comparison_runner uses 'accuracy' for augmented, and calculates improvement later
             summary['performance']['fixed_augmentation'] = {
-                'accuracy': results['fixed_aug']['augmented_accuracy'],
-                'improvement': results['fixed_aug']['accuracy_improvement'],
+                'accuracy': results['fixed_aug']['accuracy'],
+                'avg_confidence': results['fixed_aug']['avg_confidence'],
                 'time_per_sample': results['fixed_aug'].get('time_per_sample')
             }
         
         if 'tta' in results:
+            # comparison_runner uses 'accuracy' and 'tta_avg_confidence'
             summary['performance']['tta'] = {
-                'accuracy': results['tta']['tta_accuracy'],
-                'improvement': results['tta']['accuracy_improvement'],
+                'accuracy': results['tta']['accuracy'],
+                'avg_confidence': results['tta']['tta_avg_confidence'],
                 'time_per_sample': results['tta'].get('time_per_sample'),
                 'num_augmentations': results['tta'].get('num_augmentations')
             }
         
         if 'rl' in results:
+            # comparison_runner uses 'accuracy' and 'final_avg_confidence'
             summary['performance']['rl_agent'] = {
-                'accuracy': results['rl']['final_accuracy'],
-                'improvement': results['rl']['accuracy_improvement'],
+                'accuracy': results['rl']['accuracy'],
+                'avg_confidence': results['rl']['final_avg_confidence'],
                 'avg_reward': results['rl'].get('avg_reward'),
                 'time_per_sample': results['rl'].get('time_per_sample'),
                 'model_loaded': results['rl'].get('model_loaded', False)
@@ -92,9 +97,14 @@ class OutputManager:
         
         # Determine best method
         improvements = {}
+        baseline_acc = summary['performance'].get('baseline', {}).get('accuracy', 0)
+        
         for method, data in summary['performance'].items():
-            if 'improvement' in data:
-                improvements[method] = data['improvement']
+            if method != 'baseline':
+                accuracy = data.get('accuracy', 0)
+                improvement = accuracy - baseline_acc
+                data['improvement'] = improvement # Add improvement to the summary for clarity
+                improvements[method] = improvement
         
         if improvements:
             best_method = max(improvements, key=improvements.get)
@@ -105,20 +115,47 @@ class OutputManager:
             }
         
         return summary
-        
     
+    def _generate_text_report(self, results: Dict[str, Any], config: Dict[str, Any], timestamp: str) -> None:
+        """Generate a human-readable text report."""
+        report_path = self.output_dir / f'report_{timestamp}.txt'
+        
+        with open(report_path, 'w') as f:
+            f.write("="*80 + "\n")
+            f.write(f"Comprehensive Evaluation Report - {datetime.now().isoformat()}\n")
+            f.write("="*80 + "\n\n")
+            
+            f.write("--- CONFIGURATION ---\n")
+            f.write(json.dumps(config, indent=4, cls=NpEncoder) + "\n\n")
+            
+            f.write("--- RESULTS SUMMARY ---\n")
+            summary = self._create_summary(results, config)
+            f.write(json.dumps(summary, indent=4, cls=NpEncoder) + "\n\n")
+            
+            f.write("--- FORMATTED COMPARISON ---\n")
+            f.write(ResultsFormatter.format_accuracy_comparison(results) + "\n\n")
+            f.write(ResultsFormatter.format_timing_comparison(results) + "\n\n")
+            f.write(ResultsFormatter.format_improvement_summary(results) + "\n\n")
+            
+            f.write("--- RECOMMENDATIONS ---\n")
+            f.write(self._generate_recommendations(results) + "\n")
+        
+        print(f"   Text report: {report_path}")
+
     def _generate_recommendations(self, results: Dict[str, Any]) -> str:
         """Generate method recommendations based on results."""
         recommendations = []
         
         # Calculate improvements
         improvements = {}
+        baseline_acc = results.get('baseline', {}).get('accuracy', 0)
+        
         if 'fixed_aug' in results:
-            improvements['Fixed Augmentation'] = results['fixed_aug']['accuracy_improvement']
+            improvements['Fixed Augmentation'] = results['fixed_aug']['accuracy'] - baseline_acc
         if 'tta' in results:
-            improvements['TTA'] = results['tta']['accuracy_improvement']
+            improvements['TTA'] = results['tta']['accuracy'] - baseline_acc
         if 'rl' in results:
-            improvements['RL Agent'] = results['rl']['accuracy_improvement']
+            improvements['RL Agent'] = results['rl']['accuracy'] - baseline_acc
         
         # Find best method
         if improvements:
@@ -168,6 +205,17 @@ class OutputManager:
                     except Exception as e:
                         print(f"  Could not remove {old_file.name}: {e}")
 
+class NpEncoder(json.JSONEncoder):
+    """Custom JSON encoder to handle NumPy data types."""
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super(NpEncoder, self).default(obj)
+
 
 class ResultsFormatter:
     """Utility class for formatting evaluation results for display."""
@@ -177,23 +225,23 @@ class ResultsFormatter:
         """Format accuracy comparison as a table."""
         lines = [" ACCURACY COMPARISON:", "-" * 40]
         
-        if 'baseline' in results:
-            acc = results['baseline']['accuracy']
-            lines.append(f"Baseline:        {acc:.4f}")
+        baseline_acc = results.get('baseline', {}).get('accuracy', 0)
+        if baseline_acc:
+            lines.append(f"Baseline:        {baseline_acc:.4f}")
         
         if 'fixed_aug' in results:
-            acc = results['fixed_aug']['augmented_accuracy']
-            imp = results['fixed_aug']['accuracy_improvement']
+            acc = results['fixed_aug']['accuracy']
+            imp = acc - baseline_acc
             lines.append(f"Fixed Aug:       {acc:.4f} ({imp:+.4f})")
         
         if 'tta' in results:
-            acc = results['tta']['tta_accuracy']
-            imp = results['tta']['accuracy_improvement']
+            acc = results['tta']['accuracy']
+            imp = acc - baseline_acc
             lines.append(f"TTA:             {acc:.4f} ({imp:+.4f})")
         
         if 'rl' in results:
-            acc = results['rl']['final_accuracy']
-            imp = results['rl']['accuracy_improvement']
+            acc = results['rl']['accuracy']
+            imp = acc - baseline_acc
             loaded = "OK" if results['rl'].get('model_loaded', False) else "NO"
             lines.append(f"RL Agent:        {acc:.4f} ({imp:+.4f}) {loaded}")
         
@@ -212,7 +260,8 @@ class ResultsFormatter:
         
         for method in ['fixed_aug', 'tta', 'rl']:
             if method in results:
-                time_ms = results[method].get('time_per_sample', 0) * 1000
+                time_per_sample = results[method].get('time_per_sample', 0)
+                time_ms = time_per_sample * 1000
                 slowdown = f"({time_ms/baseline_time:.1f}×)" if baseline_time and baseline_time > 0 else ""
                 method_name = method.replace('_', ' ').title()
                 lines.append(f"{method_name:12}: {time_ms:.1f}ms {slowdown}")
@@ -225,14 +274,14 @@ class ResultsFormatter:
         lines = ["💡 IMPROVEMENT SUMMARY:", "-" * 40]
         
         improvements = {}
-        for method in ['fixed_aug', 'tta', 'rl']:
-            if method in results:
-                if method == 'fixed_aug':
-                    improvements['Fixed Aug'] = results[method]['accuracy_improvement']
-                elif method == 'tta':
-                    improvements['TTA'] = results[method]['accuracy_improvement']
-                elif method == 'rl':
-                    improvements['RL Agent'] = results[method]['accuracy_improvement']
+        baseline_acc = results.get('baseline', {}).get('accuracy', 0)
+        
+        if 'fixed_aug' in results:
+            improvements['Fixed Aug'] = results['fixed_aug']['accuracy'] - baseline_acc
+        if 'tta' in results:
+            improvements['TTA'] = results['tta']['accuracy'] - baseline_acc
+        if 'rl' in results:
+            improvements['RL Agent'] = results['rl']['accuracy'] - baseline_acc
         
         if improvements:
             # Sort by improvement
