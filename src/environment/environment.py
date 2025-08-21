@@ -7,10 +7,10 @@ from .transforms import get_action_transform
 
 class ImageAugmentationEnv:
     """
-    RL environment
+    RL environment with enhanced state representation including image features
     """
 
-    def __init__(self, classifier, max_steps, device):
+    def __init__(self, classifier, max_steps, device, image_feature_dim=128):
         self.classifier = classifier
         self.max_steps = max_steps
         self.device = device
@@ -18,6 +18,12 @@ class ImageAugmentationEnv:
         self.original_image_tensor = None
         self.augmented_image_tensor = None
         self.true_label = None
+        
+        # Enhanced state configuration
+        self.image_feature_dim = image_feature_dim
+        self.logits_dim = 10  # CIFAR-10 classes
+        self.additional_features_dim = 5  # confidence, entropy, margin, correctness, step_ratio
+        self.total_state_dim = self.logits_dim + self.additional_features_dim + self.image_feature_dim
         
         # Track initial state for comparison
         self.initial_prediction = None
@@ -31,10 +37,154 @@ class ImageAugmentationEnv:
         ])
 
         self.feature_extractor = self.classifier
+        
+        # Create feature extraction hook
+        self._setup_feature_extraction()
+
+
+    def _setup_feature_extraction(self):
+        """Setup feature extraction from classifier's intermediate layers."""
+        self.image_features = None
+        
+        def feature_hook(module, input, output):
+            # Extract features from the layer before the final classifier
+            # For VGG, this would be after the features but before classifier
+            if hasattr(output, 'shape') and len(output.shape) >= 2:
+                # Global average pooling if spatial dimensions exist
+                if len(output.shape) == 4:  # [batch, channels, height, width]
+                    pooled = F.adaptive_avg_pool2d(output, (1, 1))
+                    self.image_features = pooled.view(output.size(0), -1)
+                else:  # Already flattened
+                    self.image_features = output
+        
+        # Register hook on the appropriate layer
+        hook_registered = False
+        
+        # For VGG, try to hook before the final linear layer
+        if hasattr(self.classifier, 'classifier'):
+            # Check if classifier is Sequential or single layer
+            if hasattr(self.classifier.classifier, '__len__'):
+                # Sequential module
+                if len(self.classifier.classifier) > 0:
+                    # Hook on the first layer of classifier (usually after features)
+                    self.classifier.classifier[0].register_forward_hook(feature_hook)
+                    hook_registered = True
+            elif hasattr(self.classifier.classifier, 'register_forward_hook'):
+                # Single layer
+                self.classifier.classifier.register_forward_hook(feature_hook)
+                hook_registered = True
+        
+        # If no hook registered, try alternative approaches
+        if not hook_registered:
+            if hasattr(self.classifier, 'fc'):
+                # ResNet-style architectures
+                self.classifier.fc.register_forward_hook(feature_hook)
+                hook_registered = True
+        
+        # If still no hook, use fallback method
+        if not hook_registered:
+            self._use_penultimate_layer_features = True
+            print("Warning: Using fallback feature extraction method")
+
+    def _extract_image_features(self, image_tensor):
+        """
+        Extract image features using the classifier's intermediate representations.
+        
+        Args:
+            image_tensor: Input image tensor [1, 3, 32, 32]
+            
+        Returns:
+            Feature vector of shape [image_feature_dim]
+        """
+        with torch.no_grad():
+            if hasattr(self, '_use_penultimate_layer_features'):
+                # Alternative approach: modify forward pass to get intermediate features
+                features = self._get_penultimate_features(image_tensor)
+            else:
+                # Use the hook-based approach
+                self.image_features = None  # Reset before forward pass
+                _ = self.classifier(image_tensor)  # Forward pass triggers the hook
+                features = self.image_features
+                
+            if features is None:
+                # Final fallback: use output logits as features
+                print("Warning: Using logits as image features (fallback)")
+                logits = self.classifier(image_tensor)
+                features = logits
+            
+            # Ensure features have the right shape and are detached
+            if isinstance(features, torch.Tensor):
+                features = features.detach()
+            else:
+                features = torch.tensor(features, device=image_tensor.device)
+            
+            # Handle different tensor shapes
+            if features.dim() > 2:
+                features = F.adaptive_avg_pool2d(features, (1, 1)).view(features.size(0), -1)
+            elif features.dim() == 1:
+                features = features.unsqueeze(0)
+                
+            # Reduce to target dimension if necessary
+            if features.size(1) > self.image_feature_dim:
+                # Use simple truncation (could also use PCA in the future)
+                features = features[:, :self.image_feature_dim]
+            elif features.size(1) < self.image_feature_dim:
+                # Pad with zeros if features are smaller than target
+                padding = torch.zeros(features.size(0), 
+                                    self.image_feature_dim - features.size(1), 
+                                    device=features.device)
+                features = torch.cat([features, padding], dim=1)
+            
+            # Normalize features for stability
+            features = F.normalize(features, p=2, dim=1)
+            
+            return features.squeeze(0)  # Remove batch dimension
+
+    def _get_penultimate_features(self, image_tensor):
+        """
+        Alternative method to extract features from penultimate layer.
+        This method manually extracts features by modifying the forward pass.
+        """
+        if hasattr(self.classifier, 'features') and hasattr(self.classifier, 'classifier'):
+            # VGG-style architecture
+            with torch.no_grad():
+                x = self.classifier.features(image_tensor)
+                x = x.view(x.size(0), -1)  # Flatten
+                
+                # Check if classifier is a Sequential module or single Linear layer
+                if hasattr(self.classifier.classifier, '__len__'):
+                    # It's a Sequential module with multiple layers
+                    if len(self.classifier.classifier) > 1:
+                        # Pass through all but the last layer
+                        for i, layer in enumerate(self.classifier.classifier[:-1]):
+                            x = layer(x)
+                    # If only one layer, x is already the features we want
+                elif hasattr(self.classifier.classifier, 'weight'):
+                    # It's a single Linear layer, x is already the input features we want
+                    pass
+                else:
+                    # Try to iterate through the classifier
+                    try:
+                        layers = list(self.classifier.classifier.children())
+                        if len(layers) > 1:
+                            for layer in layers[:-1]:
+                                x = layer(x)
+                    except:
+                        # If all fails, return x as is (features after CNN)
+                        pass
+                
+                return x
+        else:
+            # For other architectures, return None to use logits
+            return None
+
+    def get_state_dim(self):
+        """Return the total state dimension."""
+        return self.total_state_dim
 
     def reset(self, image_tensor, true_label):
         """
-        Initialize a new RL episode with enhanced state representation.
+        Initialize a new RL episode with enhanced state representation including image features.
         """
         self.original_image_tensor = image_tensor.to(self.device)
         self.augmented_image_tensor = self.original_image_tensor.clone()
@@ -50,14 +200,17 @@ class ImageAugmentationEnv:
             self.initial_confidence = probabilities.max().item()
             self.initial_correct = (self.initial_prediction == self.true_label)
             
-            # Enhanced state representation
-            state = self._create_enhanced_state(output, probabilities)
+            # Enhanced state representation with image features
+            state = self._create_enhanced_state_with_features(output, probabilities)
 
         return state
 
-    def _create_enhanced_state(self, logits, probabilities):
+    def _create_enhanced_state_with_features(self, logits, probabilities):
         """
-        Create enhanced state representation combining multiple information sources.
+        Create enhanced state representation combining logits, confidence measures, and image features.
+        
+        Returns:
+            numpy array of shape [total_state_dim] = [logits_dim + additional_features_dim + image_feature_dim]
         """
         # Basic logits (10 dimensions)
         logits_norm = F.normalize(logits.squeeze(0), dim=0)
@@ -74,10 +227,14 @@ class ImageAugmentationEnv:
         # Step information (1 dimension)
         step_ratio = self.current_step / self.max_steps
         
+        # Extract image features
+        image_features = self._extract_image_features(self.augmented_image_tensor.unsqueeze(0))
+        
         # Combine all features
         enhanced_state = torch.cat([
             logits_norm.cpu(),
-            torch.tensor([max_prob, entropy, confidence_margin, is_correct, step_ratio])
+            torch.tensor([max_prob, entropy, confidence_margin, is_correct, step_ratio]),
+            image_features.cpu()
         ])
         
         return enhanced_state.numpy()
@@ -114,7 +271,7 @@ class ImageAugmentationEnv:
         )
 
         done = self.current_step >= self.max_steps
-        next_state = self._create_enhanced_state(output, probabilities)
+        next_state = self._create_enhanced_state_with_features(output, probabilities)
 
         info = {
             'prediction': prediction,

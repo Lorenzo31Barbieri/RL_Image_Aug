@@ -18,7 +18,7 @@ class EvaluationConfig:
     
     # Model paths
     classifier_path: str = './checkpoint/ckpt.pth'
-    rl_model_path: str = './models/best_improved_dqn_model.pth'
+    rl_model_path: str = './models/enhanced_dqn_episode_72000.pth'
     data_root: str = './data'
     
     # Evaluation parameters  

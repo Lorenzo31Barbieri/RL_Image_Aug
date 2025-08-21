@@ -9,20 +9,23 @@ from collections import deque
 
 class QNetwork(nn.Module):
     """
-    QNetwork
+    Enhanced QNetwork to handle larger state space with image features
     """
 
-    def __init__(self, state_dim, action_dim, hidden_dim=256):
+    def __init__(self, state_dim, action_dim, hidden_dim=512):
         super(QNetwork, self).__init__()
         
+        # Larger hidden dimensions to handle the increased state space
         self.fc1 = nn.Linear(state_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, hidden_dim)
         self.fc3 = nn.Linear(hidden_dim, hidden_dim // 2)
-        self.fc4 = nn.Linear(hidden_dim // 2, action_dim)
+        self.fc4 = nn.Linear(hidden_dim // 2, hidden_dim // 4)
+        self.fc5 = nn.Linear(hidden_dim // 4, action_dim)
         
         self.dropout = nn.Dropout(0.2)
         self.layer_norm1 = nn.LayerNorm(hidden_dim)
         self.layer_norm2 = nn.LayerNorm(hidden_dim)
+        self.layer_norm3 = nn.LayerNorm(hidden_dim // 2)
         
         # Initialize weights
         self._init_weights()
@@ -39,18 +42,20 @@ class QNetwork(nn.Module):
         x = self.dropout(x)
         x = F.relu(self.layer_norm2(self.fc2(x)))
         x = self.dropout(x)
-        x = F.relu(self.fc3(x))
-        return self.fc4(x)
+        x = F.relu(self.layer_norm3(self.fc3(x)))
+        x = self.dropout(x)
+        x = F.relu(self.fc4(x))
+        return self.fc5(x)
 
 
 class DQNAgent:
     """
-    DQN Agent
+    Enhanced DQN Agent with support for larger state spaces
     """
     
-    def __init__(self, state_dim, action_dim, device, gamma=0.95, lr=0.001,
+    def __init__(self, state_dim, action_dim, device, gamma=0.95, lr=0.0001,
                  epsilon_start=1.0, epsilon_end=0.01, epsilon_decay=0.9995,
-                 buffer_size=50000, batch_size=128, target_update_freq=500,
+                 buffer_size=100000, batch_size=128, target_update_freq=1000,
                  double_dqn=True, prioritized_replay=False):
         
         self.state_dim = state_dim
@@ -66,19 +71,21 @@ class DQNAgent:
         self.double_dqn = double_dqn
         self.prioritized_replay = prioritized_replay
 
-        # Networks
-        self.q_network = QNetwork(state_dim, action_dim).to(device)
-        self.target_q_network = QNetwork(state_dim, action_dim).to(device)
+        # Enhanced networks for larger state space
+        hidden_dim = max(512, state_dim * 2)  # Scale hidden dimension with state size
+        self.q_network = QNetwork(state_dim, action_dim, hidden_dim).to(device)
+        self.target_q_network = QNetwork(state_dim, action_dim, hidden_dim).to(device)
         self.target_q_network.load_state_dict(self.q_network.state_dict())
         self.target_q_network.eval()
 
-        # Optimizer with weight decay for regularization
+        # Optimizer with lower learning rate for stability with larger networks
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=lr, weight_decay=1e-5)
         
         # Learning rate scheduler
-        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=2000, gamma=0.9)
+        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=3000, gamma=0.9)
         
-        # Experience replay
+        # Experience replay with larger buffer for complex state space
+        buffer_size = max(buffer_size, 100000)  # Ensure minimum buffer size
         if prioritized_replay:
             self.replay_buffer = PrioritizedReplayBuffer(buffer_size)
         else:
@@ -155,7 +162,7 @@ class DQNAgent:
             states, actions, rewards, next_states, dones = zip(*experiences)
             weights = torch.ones(self.batch_size).to(self.device)
 
-        # Convert to tensors
+        # Convert to tensors - handle variable state dimensions
         states = torch.from_numpy(np.vstack(states)).float().to(self.device)
         actions = torch.from_numpy(np.vstack(actions)).long().to(self.device)
         rewards = torch.from_numpy(np.vstack(rewards)).float().to(self.device)
@@ -185,8 +192,8 @@ class DQNAgent:
         self.optimizer.zero_grad()
         loss.backward()
         
-        # Gradient clipping for stability
-        torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), 1.0)
+        # Gradient clipping for stability with larger networks
+        torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), 0.5)
         
         self.optimizer.step()
         self.scheduler.step()
@@ -203,7 +210,8 @@ class DQNAgent:
                 self.replay_buffer.update_priority(indices[i], abs(td_error[0]))
 
         # Decay epsilon
-        self.epsilon = max(self.epsilon_end, self.epsilon * self.epsilon_decay)
+        # NOTE: Epsilon decay is now handled in the training script for enhanced control
+        # self.epsilon = max(self.epsilon_end, self.epsilon * self.epsilon_decay)
         
         return loss.item()
 
