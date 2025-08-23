@@ -7,10 +7,10 @@ from .transforms import get_action_transform
 
 class ImageAugmentationEnv:
     """
-    RL environment with enhanced state representation including image features
+    RL environment with adaptive state representation
     """
 
-    def __init__(self, classifier, max_steps, device, image_feature_dim=128):
+    def __init__(self, classifier, max_steps, device, agent=None, image_feature_dim=128):
         self.classifier = classifier
         self.max_steps = max_steps
         self.device = device
@@ -19,11 +19,22 @@ class ImageAugmentationEnv:
         self.augmented_image_tensor = None
         self.true_label = None
         
-        # Enhanced state configuration
-        self.image_feature_dim = image_feature_dim
-        self.logits_dim = 10  # CIFAR-10 classes
-        self.additional_features_dim = 5  # confidence, entropy, margin, correctness, step_ratio
-        self.total_state_dim = self.logits_dim + self.additional_features_dim + self.image_feature_dim
+        # Adaptive state configuration based on agent
+        self.agent = agent
+        self.use_enhanced_state = self._should_use_enhanced_state(agent, image_feature_dim)
+        
+        if self.use_enhanced_state:
+            self.image_feature_dim = image_feature_dim
+            self.logits_dim = 10  # CIFAR-10 classes
+            self.additional_features_dim = 5  # confidence, entropy, margin, correctness, step_ratio
+            self.total_state_dim = self.logits_dim + self.additional_features_dim + self.image_feature_dim
+            print(f"Using enhanced state space: {self.total_state_dim} dimensions")
+        else:
+            self.image_feature_dim = 0
+            self.logits_dim = 10
+            self.additional_features_dim = 5
+            self.total_state_dim = self.logits_dim + self.additional_features_dim
+            print(f"Using original state space: {self.total_state_dim} dimensions")
         
         # Track initial state for comparison
         self.initial_prediction = None
@@ -36,11 +47,50 @@ class ImageAugmentationEnv:
             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
         ])
 
-        self.feature_extractor = self.classifier
-        
-        # Create feature extraction hook
-        self._setup_feature_extraction()
+        # Setup feature extraction only if using enhanced state
+        if self.use_enhanced_state:
+            self.feature_extractor = self.classifier
+            self._setup_feature_extraction()
 
+    def _should_use_enhanced_state(self, agent, image_feature_dim):
+        """
+        Determine if we should use enhanced state based on agent configuration.
+        
+        Args:
+            agent: The RL agent (if available)
+            image_feature_dim: Desired image feature dimension
+            
+        Returns:
+            bool: True if enhanced state should be used
+        """
+        if agent is None:
+            # No agent provided, default to enhanced state
+            return True
+        
+        # Check if agent has detected dimensions
+        if hasattr(agent, 'detected_state_dim'):
+            detected_dim = agent.detected_state_dim
+            if detected_dim == 15:  # Original state dimension
+                print("Agent expects original state dimensions (15)")
+                return False
+            elif detected_dim > 15:  # Enhanced state dimension
+                actual_image_features = detected_dim - 15
+                print(f"Agent expects enhanced state dimensions ({detected_dim}) with {actual_image_features} image features")
+                # Update image feature dim to match agent
+                if hasattr(self, 'image_feature_dim'):
+                    self.image_feature_dim = actual_image_features
+                return True
+        
+        # Check agent's state_dim attribute
+        if hasattr(agent, 'state_dim'):
+            agent_state_dim = agent.state_dim
+            if agent_state_dim == 15:
+                return False
+            elif agent_state_dim > 15:
+                return True
+        
+        # Default to enhanced state
+        return True
 
     def _setup_feature_extraction(self):
         """Setup feature extraction from classifier's intermediate layers."""
@@ -89,6 +139,7 @@ class ImageAugmentationEnv:
     def _extract_image_features(self, image_tensor):
         """
         Extract image features using the classifier's intermediate representations.
+        Only called if using enhanced state.
         
         Args:
             image_tensor: Input image tensor [1, 3, 32, 32]
@@ -96,6 +147,9 @@ class ImageAugmentationEnv:
         Returns:
             Feature vector of shape [image_feature_dim]
         """
+        if not self.use_enhanced_state:
+            return torch.zeros(0)  # Return empty tensor for original state
+            
         with torch.no_grad():
             if hasattr(self, '_use_penultimate_layer_features'):
                 # Alternative approach: modify forward pass to get intermediate features
@@ -184,7 +238,7 @@ class ImageAugmentationEnv:
 
     def reset(self, image_tensor, true_label):
         """
-        Initialize a new RL episode with enhanced state representation including image features.
+        Initialize a new RL episode with adaptive state representation.
         """
         self.original_image_tensor = image_tensor.to(self.device)
         self.augmented_image_tensor = self.original_image_tensor.clone()
@@ -200,8 +254,11 @@ class ImageAugmentationEnv:
             self.initial_confidence = probabilities.max().item()
             self.initial_correct = (self.initial_prediction == self.true_label)
             
-            # Enhanced state representation with image features
-            state = self._create_enhanced_state_with_features(output, probabilities)
+            # Create state representation based on configuration
+            if self.use_enhanced_state:
+                state = self._create_enhanced_state_with_features(output, probabilities)
+            else:
+                state = self._create_original_state(output, probabilities)
 
         return state
 
@@ -239,6 +296,36 @@ class ImageAugmentationEnv:
         
         return enhanced_state.numpy()
 
+    def _create_original_state(self, logits, probabilities):
+        """
+        Create original state representation (backward compatibility).
+        
+        Returns:
+            numpy array of shape [15] = [logits_dim + additional_features_dim]
+        """
+        # Basic logits (10 dimensions)
+        logits_norm = F.normalize(logits.squeeze(0), dim=0)
+        
+        # Confidence measures (3 dimensions)
+        max_prob = probabilities.max().item()
+        entropy = -torch.sum(probabilities * torch.log(probabilities + 1e-8)).item()
+        margin = torch.topk(probabilities, 2)[0]
+        confidence_margin = (margin[0, 0] - margin[0, 1]).item()
+        
+        # Prediction correctness indicator (1 dimension)
+        is_correct = float(torch.argmax(logits).item() == self.true_label)
+        
+        # Step information (1 dimension)
+        step_ratio = self.current_step / self.max_steps
+        
+        # Combine features (no image features)
+        original_state = torch.cat([
+            logits_norm.cpu(),
+            torch.tensor([max_prob, entropy, confidence_margin, is_correct, step_ratio])
+        ])
+        
+        return original_state.numpy()
+
     def step(self, action):
         """
         Execute action with improved reward function.
@@ -271,7 +358,12 @@ class ImageAugmentationEnv:
         )
 
         done = self.current_step >= self.max_steps
-        next_state = self._create_enhanced_state_with_features(output, probabilities)
+        
+        # Create next state based on configuration
+        if self.use_enhanced_state:
+            next_state = self._create_enhanced_state_with_features(output, probabilities)
+        else:
+            next_state = self._create_original_state(output, probabilities)
 
         info = {
             'prediction': prediction,
@@ -279,7 +371,9 @@ class ImageAugmentationEnv:
             'true_label': self.true_label,
             'is_correct': is_correct,
             'confidence_change': confidence - prev_confidence,
-            'action_taken': action
+            'action_taken': action,
+            'state_type': 'enhanced' if self.use_enhanced_state else 'original',
+            'state_dim': len(next_state)
         }
 
         return next_state, reward, done, info
@@ -314,9 +408,9 @@ class ImageAugmentationEnv:
         
         # Action-specific penalties to discourage overuse of aggressive transforms
         action_penalties = {
-            4: -0.1,  # Rotation penalties
-            5: -0.1,
-            6: -0.2,  # Horizontal flip penalty (can be harmful for CIFAR-10)
+            6: -0.1,  # Rotation penalties
+            7: -0.1,
+            12: -0.2,  # Horizontal flip penalty (can be harmful for CIFAR-10)
         }
         reward += action_penalties.get(action, 0)
         
@@ -343,5 +437,7 @@ class ImageAugmentationEnv:
             'final_confidence': final_confidence,
             'correctness_improved': (not self.initial_correct) and final_correct,
             'confidence_improved': final_confidence > self.initial_confidence,
-            'overall_improved': final_correct and (final_confidence > self.initial_confidence or not self.initial_correct)
+            'overall_improved': final_correct and (final_confidence > self.initial_confidence or not self.initial_correct),
+            'state_type': 'enhanced' if self.use_enhanced_state else 'original',
+            'state_dim': self.total_state_dim
         }

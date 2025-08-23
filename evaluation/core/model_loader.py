@@ -6,7 +6,7 @@ from src.models.agent import DQNAgent
 
 # --- GLOBAL CONFIGURATION ---
 DEFAULT_CLASSIFIER_PATH = './checkpoint/ckpt.pth'
-DEFAULT_RL_MODEL_PATH = './models/best_enhanced_dqn_model.pth'  # Updated for enhanced model
+DEFAULT_RL_MODEL_PATH = './models/enhanced_dqn_episode_72000.pth'
 DEFAULT_IMAGE_FEATURE_DIM = 128
 
 
@@ -94,36 +94,56 @@ def load_classifier(model_path: str = DEFAULT_CLASSIFIER_PATH,
     return classifier_model
 
 
+def detect_model_state_dimension(model_path: str) -> Optional[int]:
+    """
+    Detect the state dimension that a model was trained with.
+    
+    Args:
+        model_path: Path to the model file
+        
+    Returns:
+        State dimension if detected, None otherwise
+    """
+    if not os.path.exists(model_path):
+        return None
+        
+    try:
+        state_dict = torch.load(model_path, map_location='cpu')
+        
+        # Find input dimension from first layer
+        for key, tensor in state_dict.items():
+            if 'fc1.weight' in key:
+                return tensor.shape[1]
+                
+    except Exception:
+        pass
+    
+    return None
+
+
 def load_rl_agent(model_path: str = DEFAULT_RL_MODEL_PATH,
                  state_dim: int = None,
                  action_dim: int = None,
                  device: torch.device = None,
                  image_feature_dim: int = DEFAULT_IMAGE_FEATURE_DIM) -> Tuple[DQNAgent, bool]:
     """
-    Carica l'agente RL pre-trained con supporto per stato migliorato.
+    Load RL agent with automatic dimension detection and compatibility handling.
     
     Args:
-        model_path: Percorso del file del modello RL
-        state_dim: Dimensione dello spazio degli stati (calcolata automaticamente se None)
-        action_dim: Dimensione dello spazio delle azioni
-        device: Device su cui caricare il modello
-        image_feature_dim: Dimensione delle feature dell'immagine
+        model_path: Path to the RL model file
+        state_dim: State space dimension (auto-detected if None)
+        action_dim: Action space dimension
+        device: Device for computation
+        image_feature_dim: Image feature dimension (ignored if model has different dims)
     
     Returns:
-        Tupla (agent, model_loaded) dove model_loaded indica se il modello è stato caricato con successo
+        Tuple (agent, model_loaded) where model_loaded indicates successful loading
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # Calculate state dimension automatically if not provided
-    if state_dim is None:
-        logits_dim = 10  # CIFAR-10 classes
-        additional_features_dim = 5  # confidence, entropy, margin, correctness, step_ratio
-        state_dim = logits_dim + additional_features_dim + image_feature_dim
-        print(f"Auto-calculated state dimension: {state_dim} (logits: {logits_dim}, additional: {additional_features_dim}, image_features: {image_feature_dim})")
-    
     if action_dim is None:
-        # Importa dinamicamente per evitare dipendenze circolari
+        # Import dynamically to avoid circular dependencies
         try:
             from src.environment.transforms import get_num_actions
             action_dim = get_num_actions()
@@ -131,88 +151,91 @@ def load_rl_agent(model_path: str = DEFAULT_RL_MODEL_PATH,
             print("Warning: Could not import get_num_actions, using default action_dim=16")
             action_dim = 16
     
-    print(f"Loading enhanced RL agent...")
+    print(f"Loading RL agent...")
     print(f"Model path: {model_path}")
-    print(f"State dim: {state_dim}, Action dim: {action_dim}")
-    print(f"Image feature dim: {image_feature_dim}")
     print(f"Device: {device}")
     
-    # Inizializza l'agente con dimensioni migliorate
-    agent = DQNAgent(state_dim, action_dim, device)
-    model_loaded = False
+    # Try to detect state dimension from existing model
+    detected_state_dim = detect_model_state_dimension(model_path)
     
-    # Try to load enhanced model first, then fallback to regular paths
+    # Try alternative model paths if primary doesn't exist
     model_paths_to_try = [
         model_path,
         './models/best_enhanced_dqn_model.pth',
         './models/final_enhanced_dqn_model.pth',
-        './models/best_improved_dqn_model.pth',  # Fallback to original
-        './models/final_improved_dqn_model.pth'   # Fallback to original
+        './models/enhanced_dqn_episode_72000.pth',
+        './models/best_improved_dqn_model.pth',
+        './models/final_improved_dqn_model.pth'
     ]
     
+    actual_model_path = None
+    actual_state_dim = None
+    
+    # Find the first existing model and detect its dimensions
     for path_to_try in model_paths_to_try:
         if os.path.exists(path_to_try):
-            try:
-                # Carica i pesi del modello
-                state_dict = torch.load(path_to_try, map_location=device)
-                
-                # Verifica compatibilità dimensioni
-                first_layer_key = None
-                for key in state_dict.keys():
-                    if 'fc1.weight' in key or '.0.weight' in key:
-                        first_layer_key = key
-                        break
-                
-                if first_layer_key:
-                    loaded_input_dim = state_dict[first_layer_key].shape[1]
-                    if loaded_input_dim != state_dim:
-                        print(f"Warning: Model {path_to_try} expects state_dim={loaded_input_dim}, but current state_dim={state_dim}")
-                        
-                        # Try to adapt if the difference is only in image features
-                        expected_base_dim = 10 + 5  # logits + additional
-                        loaded_img_features = loaded_input_dim - expected_base_dim
-                        current_img_features = state_dim - expected_base_dim
-                        
-                        if loaded_img_features > 0 and current_img_features > 0:
-                            print(f"Model has image features dim {loaded_img_features}, current is {current_img_features}")
-                            if abs(loaded_img_features - current_img_features) <= 64:  # Allow some flexibility
-                                print("Attempting to adapt agent to loaded model dimensions...")
-                                # Re-initialize agent with loaded dimensions
-                                adapted_state_dim = loaded_input_dim
-                                agent = DQNAgent(adapted_state_dim, action_dim, device)
-                                print(f"Agent adapted to state_dim={adapted_state_dim}")
-                        else:
-                            print(f"Skipping incompatible model {path_to_try}")
-                            continue
-                
-                # Carica sia Q-network che target Q-network
-                agent.q_network.load_state_dict(state_dict)
-                agent.target_q_network.load_state_dict(state_dict)
-                
-                # Configura per valutazione
-                agent.q_network.eval()
-                agent.target_q_network.eval()
-                agent.epsilon = 0  # Disabilita esplorazione per valutazione
-                
-                model_loaded = True
-                print(f"Successfully loaded enhanced RL agent from {path_to_try}")
-                
-                # Verify loaded model info
-                actual_state_dim = getattr(agent, 'state_dim', 'Unknown')
-                print(f"Loaded model state dimension: {actual_state_dim}")
-                
+            detected_dim = detect_model_state_dimension(path_to_try)
+            if detected_dim:
+                actual_model_path = path_to_try
+                actual_state_dim = detected_dim
                 break
-                
-            except Exception as e:
-                print(f"Error loading RL agent from {path_to_try}: {e}")
-                continue
     
-    if not model_loaded:
-        print("Could not load any RL model, using randomly initialized agent for comparison...")
-        print("Training an enhanced RL agent first is recommended for meaningful evaluation.")
+    if actual_state_dim is None:
+        # No model found, use provided dimensions or defaults
+        if state_dim is None:
+            print("No model found for dimension detection. Using original state dimension (15).")
+            actual_state_dim = 15  # Original dimension for backward compatibility
+            image_feature_dim = 0
+        else:
+            actual_state_dim = state_dim
+            
+        agent = DQNAgent(actual_state_dim, action_dim, device)
+        model_loaded = False
+        
+        print(f"Initialized random RL agent with state_dim={actual_state_dim}, action_dim={action_dim}")
+        return agent, model_loaded
     
-    # Assicurati che epsilon sia 0 per valutazione
-    agent.epsilon = 0
+    # Calculate image feature dimension from detected state dim
+    base_dim = 15  # 10 logits + 5 additional features
+    if actual_state_dim > base_dim:
+        actual_image_feature_dim = actual_state_dim - base_dim
+        model_type = "enhanced"
+    else:
+        actual_image_feature_dim = 0
+        model_type = "original"
+    
+    print(f"Detected model: {actual_model_path}")
+    print(f"Model type: {model_type}")
+    print(f"State dimension: {actual_state_dim}")
+    print(f"Image features: {actual_image_feature_dim}")
+    
+    # Initialize agent with detected dimensions
+    agent = DQNAgent(actual_state_dim, action_dim, device)
+    model_loaded = False
+    
+    try:
+        # Load the model weights
+        state_dict = torch.load(actual_model_path, map_location=device)
+        
+        # Load both Q-network and target Q-network
+        agent.q_network.load_state_dict(state_dict)
+        agent.target_q_network.load_state_dict(state_dict)
+        
+        # Configure for evaluation
+        agent.q_network.eval()
+        agent.target_q_network.eval()
+        agent.epsilon = 0  # Disable exploration for evaluation
+        
+        model_loaded = True
+        print(f"Successfully loaded RL agent from {actual_model_path}")
+        
+    except Exception as e:
+        print(f"Error loading RL agent from {actual_model_path}: {e}")
+        print("Using randomly initialized agent...")
+    
+    # Store detected dimensions in agent for compatibility
+    agent.detected_state_dim = actual_state_dim
+    agent.detected_image_feature_dim = actual_image_feature_dim
     
     return agent, model_loaded
 
@@ -257,33 +280,25 @@ def get_model_info(model: torch.nn.Module) -> Dict[str, Any]:
 
 def validate_model_compatibility(classifier: torch.nn.Module,
                                agent: Optional[DQNAgent] = None,
-                               expected_num_classes: int = 10,
-                               expected_state_dim: int = None,
-                               image_feature_dim: int = DEFAULT_IMAGE_FEATURE_DIM) -> None:
+                               expected_num_classes: int = 10) -> None:
     """
-    Valida la compatibilità tra modelli e configurazione per stato migliorato.
+    Validate model compatibility with automatic dimension detection.
     
     Args:
-        classifier: Modello classificatore
-        agent: Agente RL (opzionale)
-        expected_num_classes: Numero di classi atteso
-        expected_state_dim: Dimensione stato attesa (calcolata se None)
-        image_feature_dim: Dimensione features immagine
+        classifier: Classifier model
+        agent: RL agent (optional)
+        expected_num_classes: Expected number of classes
     
     Raises:
-        ValueError: Se i modelli non sono compatibili
+        ValueError: If models are not compatible
     """
-    print("Validating enhanced model compatibility...")
+    print("Validating model compatibility...")
     
-    # Calculate expected state dimension if not provided
-    if expected_state_dim is None:
-        expected_state_dim = expected_num_classes + 5 + image_feature_dim
-    
-    # Valida il classificatore
+    # Validate classifier
     classifier_info = get_model_info(classifier)
     print(f"Classifier info: {classifier_info['model_type']} with {classifier_info['total_parameters']:,} parameters")
     
-    # Testa il classificatore con input dummy
+    # Test classifier with dummy input
     try:
         dummy_input = torch.randn(1, 3, 32, 32).to(next(classifier.parameters()).device)
         with torch.no_grad():
@@ -297,24 +312,22 @@ def validate_model_compatibility(classifier: torch.nn.Module,
     except Exception as e:
         raise ValueError(f"Classifier validation failed: {e}")
     
-    # Valida l'agente RL se fornito
+    # Validate RL agent if provided
     if agent is not None:
         agent_info = get_model_info(agent.q_network)
         actual_state_dim = getattr(agent, 'state_dim', 'Unknown')
+        detected_state_dim = getattr(agent, 'detected_state_dim', 'Unknown')
+        detected_image_features = getattr(agent, 'detected_image_feature_dim', 0)
         
         print(f"RL Agent info: {agent_info['model_type']} with {agent_info['total_parameters']:,} parameters")
         print(f"Agent state dimension: {actual_state_dim}")
-        print(f"Expected state dimension: {expected_state_dim}")
-        print(f"Agent input dimension: {agent_info['input_dimension']}")
+        print(f"Detected state dimension: {detected_state_dim}")
+        print(f"Detected image features: {detected_image_features}")
         
-        # Check state dimension compatibility
-        if actual_state_dim != 'Unknown' and actual_state_dim != expected_state_dim:
-            print(f"Warning: Agent state dimension ({actual_state_dim}) doesn't match expected ({expected_state_dim})")
-            print("This might indicate the agent was trained with different state configuration")
-        
-        # Testa l'agente con stato dummy
+        # Test agent with dummy state
         try:
-            dummy_state = torch.randn(1, actual_state_dim if actual_state_dim != 'Unknown' else expected_state_dim).to(agent.device)
+            test_state_dim = detected_state_dim if detected_state_dim != 'Unknown' else actual_state_dim
+            dummy_state = torch.randn(1, test_state_dim).to(agent.device)
             with torch.no_grad():
                 q_values = agent.q_network(dummy_state)
             
@@ -326,63 +339,61 @@ def validate_model_compatibility(classifier: torch.nn.Module,
         except Exception as e:
             raise ValueError(f"RL Agent validation failed: {e}")
     
-    print("All enhanced models validated successfully!")
+    print("All models validated successfully!")
 
 
 def print_loading_summary(classifier: torch.nn.Module,
                         agent: Optional[DQNAgent] = None,
-                        agent_loaded: bool = False,
-                        image_feature_dim: int = DEFAULT_IMAGE_FEATURE_DIM) -> None:
+                        agent_loaded: bool = False) -> None:
     """
-    Stampa un riassunto dei modelli caricati con informazioni sullo stato migliorato.
+    Print a summary of loaded models with dimension information.
     
     Args:
-        classifier: Modello classificatore caricato
-        agent: Agente RL (opzionale)
-        agent_loaded: Se l'agente è stato caricato con successo
-        image_feature_dim: Dimensione delle feature dell'immagine
+        classifier: Loaded classifier model
+        agent: RL agent (optional)
+        agent_loaded: Whether agent was loaded successfully
     """
     print(f"\n{'='*60}")
-    print("ENHANCED MODEL LOADING SUMMARY")
+    print("MODEL LOADING SUMMARY")
     print(f"{'='*60}")
     
-    # Info classificatore
+    # Classifier info
     classifier_info = get_model_info(classifier)
     print(f"🎯 CLASSIFIER ({classifier_info['model_type']}):")
-    print(f"  Status: Loaded and ready")
+    print(f"  Status: ✅ Loaded and ready")
     print(f"  Parameters: {classifier_info['total_parameters']:,}")
     print(f"  Training mode: {'ON' if classifier_info['is_training'] else 'OFF (Evaluation)'}")
     print(f"  Device: {classifier_info['model_device']}")
     
-    # Info agente RL
+    # RL agent info
     if agent is not None:
         agent_info = get_model_info(agent.q_network)
         actual_state_dim = getattr(agent, 'state_dim', 'Unknown')
+        detected_state_dim = getattr(agent, 'detected_state_dim', 'Unknown')
+        detected_image_features = getattr(agent, 'detected_image_feature_dim', 0)
+        
         status = "✅ Loaded from checkpoint" if agent_loaded else "⚠️ Random initialization"
         
-        print(f"\n🤖 ENHANCED RL AGENT ({agent_info['model_type']}):")
-        print(f"  {status}")
+        print(f"\n🤖 RL AGENT ({agent_info['model_type']}):")
+        print(f"  Status: {status}")
         print(f"  Parameters: {agent_info['total_parameters']:,}")
         print(f"  State dim: {actual_state_dim}, Action dim: {agent.action_dim}")
         
-        # Enhanced state breakdown
-        if actual_state_dim != 'Unknown':
-            logits_dim = 10
-            additional_dim = 5
-            calculated_img_dim = actual_state_dim - logits_dim - additional_dim
-            
-            print(f"  Enhanced State Breakdown:")
-            print(f"    - Logits: {logits_dim}")
-            print(f"    - Additional features: {additional_dim}")
-            print(f"    - Image features: {calculated_img_dim}")
-            print(f"    - Expected image features: {image_feature_dim}")
-            
-            if calculated_img_dim == image_feature_dim:
-                print(f"    ✅ State dimensions match perfectly")
-            elif abs(calculated_img_dim - image_feature_dim) <= 64:
-                print(f"    ⚠️ Close match (difference: {abs(calculated_img_dim - image_feature_dim)})")
+        # Dimension breakdown
+        if detected_state_dim != 'Unknown':
+            if detected_image_features > 0:
+                print(f"  Model Type: Enhanced (with image features)")
+                print(f"  State Breakdown:")
+                print(f"    - Logits: 10")
+                print(f"    - Additional features: 5")
+                print(f"    - Image features: {detected_image_features}")
+                print(f"    - Total: {detected_state_dim}")
             else:
-                print(f"    ❌ Dimension mismatch")
+                print(f"  Model Type: Original (no image features)")
+                print(f"  State Breakdown:")
+                print(f"    - Logits: 10")
+                print(f"    - Additional features: 5")
+                print(f"    - Total: {detected_state_dim}")
         
         print(f"  Epsilon: {agent.epsilon} (exploration disabled)")
         print(f"  Device: {agent_info['model_device']}")
@@ -393,55 +404,45 @@ def print_loading_summary(classifier: torch.nn.Module,
 
 def detect_available_rl_models(base_dir: str = './models') -> Dict[str, Dict[str, Any]]:
     """
-    Rileva i modelli RL disponibili e le loro caratteristiche.
+    Detect available RL models and their characteristics.
     
     Args:
-        base_dir: Directory base dove cercare i modelli
+        base_dir: Base directory to search for models
     
     Returns:
-        Dict con informazioni sui modelli trovati
+        Dict with information about found models
     """
     available_models = {}
     
     if not os.path.exists(base_dir):
         return available_models
     
-    # Pattern di file da cercare
-    model_patterns = [
-        'best_enhanced_dqn_model.pth',
-        'final_enhanced_dqn_model.pth',
-        'enhanced_dqn_episode_*.pth',
-        'best_improved_dqn_model.pth',
-        'final_improved_dqn_model.pth',
-        'improved_dqn_episode_*.pth'
-    ]
-    
     for filename in os.listdir(base_dir):
         if filename.endswith('.pth'):
             filepath = os.path.join(base_dir, filename)
             
             try:
-                # Carica il modello per ispezionare le dimensioni
+                # Load model to inspect dimensions
                 state_dict = torch.load(filepath, map_location='cpu')
                 
-                # Trova la dimensione di input
+                # Find input dimension
                 input_dim = None
                 for key, tensor in state_dict.items():
                     if 'fc1.weight' in key:
                         input_dim = tensor.shape[1]
                         break
                 
-                # Classifica il tipo di modello
+                # Classify model type
                 model_type = "unknown"
                 if input_dim:
                     if input_dim == 15:  # Original state dim
                         model_type = "original"
-                    elif input_dim >= 128:  # Enhanced state dim
+                    elif input_dim > 15:  # Enhanced state dim
                         model_type = "enhanced"
                         
                     # Calculate image feature dimension
                     if input_dim > 15:
-                        img_features = input_dim - 15  # Subtract logits + additional
+                        img_features = input_dim - 15  # Subtract base dimensions
                     else:
                         img_features = 0
                 
@@ -461,7 +462,7 @@ def detect_available_rl_models(base_dir: str = './models') -> Dict[str, Dict[str
 
 
 def print_available_models() -> None:
-    """Stampa i modelli RL disponibili."""
+    """Print available RL models."""
     models = detect_available_rl_models()
     
     if not models:
