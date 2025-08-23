@@ -8,14 +8,11 @@ from collections import deque
 
 
 class QNetwork(nn.Module):
-    """
-    Enhanced QNetwork to handle larger state space with image features
-    """
+    """Q-Network for 143-dimensional state space."""
 
-    def __init__(self, state_dim, action_dim, hidden_dim=512):
+    def __init__(self, state_dim=143, action_dim=16, hidden_dim=512):
         super(QNetwork, self).__init__()
         
-        # Larger hidden dimensions to handle the increased state space
         self.fc1 = nn.Linear(state_dim, hidden_dim)
         self.fc2 = nn.Linear(hidden_dim, hidden_dim)
         self.fc3 = nn.Linear(hidden_dim, hidden_dim // 2)
@@ -49,18 +46,16 @@ class QNetwork(nn.Module):
 
 
 class DQNAgent:
-    """
-    Enhanced DQN Agent with support for larger state spaces
-    """
+    """DQN Agent for 143-dimensional state space."""
     
-    def __init__(self, state_dim, action_dim, device, gamma=0.95, lr=0.0001,
-                 epsilon_start=1.0, epsilon_end=0.01, epsilon_decay=0.9995,
-                 buffer_size=100000, batch_size=128, target_update_freq=1000,
+    def __init__(self, state_dim=143, action_dim=16, device=None, gamma=0.95, lr=0.0003,
+                 epsilon_start=1.0, epsilon_end=0.005, epsilon_decay=0.99975,
+                 buffer_size=300000, batch_size=128, target_update_freq=1000,
                  double_dqn=True, prioritized_replay=False):
         
         self.state_dim = state_dim
         self.action_dim = action_dim
-        self.device = device
+        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.gamma = gamma
         self.epsilon = epsilon_start
         self.epsilon_end = epsilon_end
@@ -71,37 +66,34 @@ class DQNAgent:
         self.double_dqn = double_dqn
         self.prioritized_replay = prioritized_replay
 
-        # Enhanced networks for larger state space
-        hidden_dim = max(512, state_dim * 2)  # Scale hidden dimension with state size
-        self.q_network = QNetwork(state_dim, action_dim, hidden_dim).to(device)
-        self.target_q_network = QNetwork(state_dim, action_dim, hidden_dim).to(device)
+        # Networks
+        hidden_dim = max(512, state_dim * 2)
+        self.q_network = QNetwork(state_dim, action_dim, hidden_dim).to(self.device)
+        self.target_q_network = QNetwork(state_dim, action_dim, hidden_dim).to(self.device)
         self.target_q_network.load_state_dict(self.q_network.state_dict())
         self.target_q_network.eval()
 
-        # Optimizer with lower learning rate for stability with larger networks
+        # Optimizer
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=lr, weight_decay=1e-5)
         
         # Learning rate scheduler
         self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=3000, gamma=0.9)
         
-        # Experience replay with larger buffer for complex state space
-        buffer_size = max(buffer_size, 100000)  # Ensure minimum buffer size
+        # Experience replay
         if prioritized_replay:
             self.replay_buffer = PrioritizedReplayBuffer(buffer_size)
         else:
             self.replay_buffer = deque(maxlen=buffer_size)
         
-        # Action frequency tracking for exploration bonus
+        # Action frequency tracking
         self.action_counts = np.zeros(action_dim)
         self.total_actions = 0
 
     def select_action(self, state, training=True):
-        """
-        Enhanced action selection with exploration bonuses.
-        """
+        """Select action using epsilon-greedy policy."""
         if training and random.random() < self.epsilon:
             # Epsilon-greedy with action frequency consideration
-            if self.total_actions > 1000:  # After some experience
+            if self.total_actions > 1000:
                 # Favor less-used actions for better exploration
                 action_probs = 1.0 / (self.action_counts + 1)
                 action_probs = action_probs / action_probs.sum()
@@ -145,9 +137,7 @@ class DQNAgent:
             self.replay_buffer.append((state, action, reward, next_state, done))
 
     def learn(self):
-        """
-        Enhanced learning with Double DQN and improved loss calculation.
-        """
+        """Learn from experience replay."""
         if (self.prioritized_replay and len(self.replay_buffer) < self.batch_size) or \
            (not self.prioritized_replay and len(self.replay_buffer) < self.batch_size):
             return None
@@ -162,7 +152,7 @@ class DQNAgent:
             states, actions, rewards, next_states, dones = zip(*experiences)
             weights = torch.ones(self.batch_size).to(self.device)
 
-        # Convert to tensors - handle variable state dimensions
+        # Convert to tensors
         states = torch.from_numpy(np.vstack(states)).float().to(self.device)
         actions = torch.from_numpy(np.vstack(actions)).long().to(self.device)
         rewards = torch.from_numpy(np.vstack(rewards)).float().to(self.device)
@@ -192,7 +182,7 @@ class DQNAgent:
         self.optimizer.zero_grad()
         loss.backward()
         
-        # Gradient clipping for stability with larger networks
+        # Gradient clipping for stability
         torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), 0.5)
         
         self.optimizer.step()
@@ -208,10 +198,6 @@ class DQNAgent:
             td_errors_np = td_errors.detach().cpu().numpy()
             for i, td_error in enumerate(td_errors_np):
                 self.replay_buffer.update_priority(indices[i], abs(td_error[0]))
-
-        # Decay epsilon
-        # NOTE: Epsilon decay is now handled in the training script for enhanced control
-        # self.epsilon = max(self.epsilon_end, self.epsilon * self.epsilon_decay)
         
         return loss.item()
 
@@ -223,9 +209,7 @@ class DQNAgent:
 
 
 class PrioritizedReplayBuffer:
-    """
-    Prioritized Experience Replay Buffer.
-    """
+    """Prioritized Experience Replay Buffer."""
     
     def __init__(self, capacity, alpha=0.6, beta_start=0.4, beta_frames=100000):
         self.capacity = capacity

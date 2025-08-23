@@ -7,34 +7,29 @@ from .transforms import get_action_transform
 
 class ImageAugmentationEnv:
     """
-    RL environment with adaptive state representation
+    RL environment with 143-dimensional state representation.
+    State components:
+    - Logits (10D): Classifier output probabilities
+    - Additional features (5D): confidence, entropy, margin, correctness, step_ratio  
+    - Image features (128D): Features extracted from classifier's intermediate layers
     """
 
-    def __init__(self, classifier, max_steps, device, agent=None, image_feature_dim=128):
+    def __init__(self, classifier, max_steps, device, image_feature_dim=128):
         self.classifier = classifier
         self.max_steps = max_steps
         self.device = device
         self.current_step = 0
+        
+        # Fixed state dimensions
+        self.logits_dim = 10  # CIFAR-10 classes
+        self.additional_features_dim = 5  # confidence, entropy, margin, correctness, step_ratio
+        self.image_feature_dim = image_feature_dim
+        self.state_dim = self.logits_dim + self.additional_features_dim + self.image_feature_dim  # 143
+        
+        # Image tensors
         self.original_image_tensor = None
         self.augmented_image_tensor = None
         self.true_label = None
-        
-        # Adaptive state configuration based on agent
-        self.agent = agent
-        self.use_enhanced_state = self._should_use_enhanced_state(agent, image_feature_dim)
-        
-        if self.use_enhanced_state:
-            self.image_feature_dim = image_feature_dim
-            self.logits_dim = 10  # CIFAR-10 classes
-            self.additional_features_dim = 5  # confidence, entropy, margin, correctness, step_ratio
-            self.total_state_dim = self.logits_dim + self.additional_features_dim + self.image_feature_dim
-            print(f"Using enhanced state space: {self.total_state_dim} dimensions")
-        else:
-            self.image_feature_dim = 0
-            self.logits_dim = 10
-            self.additional_features_dim = 5
-            self.total_state_dim = self.logits_dim + self.additional_features_dim
-            print(f"Using original state space: {self.total_state_dim} dimensions")
         
         # Track initial state for comparison
         self.initial_prediction = None
@@ -47,50 +42,9 @@ class ImageAugmentationEnv:
             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
         ])
 
-        # Setup feature extraction only if using enhanced state
-        if self.use_enhanced_state:
-            self.feature_extractor = self.classifier
-            self._setup_feature_extraction()
-
-    def _should_use_enhanced_state(self, agent, image_feature_dim):
-        """
-        Determine if we should use enhanced state based on agent configuration.
-        
-        Args:
-            agent: The RL agent (if available)
-            image_feature_dim: Desired image feature dimension
-            
-        Returns:
-            bool: True if enhanced state should be used
-        """
-        if agent is None:
-            # No agent provided, default to enhanced state
-            return True
-        
-        # Check if agent has detected dimensions
-        if hasattr(agent, 'detected_state_dim'):
-            detected_dim = agent.detected_state_dim
-            if detected_dim == 15:  # Original state dimension
-                print("Agent expects original state dimensions (15)")
-                return False
-            elif detected_dim > 15:  # Enhanced state dimension
-                actual_image_features = detected_dim - 15
-                print(f"Agent expects enhanced state dimensions ({detected_dim}) with {actual_image_features} image features")
-                # Update image feature dim to match agent
-                if hasattr(self, 'image_feature_dim'):
-                    self.image_feature_dim = actual_image_features
-                return True
-        
-        # Check agent's state_dim attribute
-        if hasattr(agent, 'state_dim'):
-            agent_state_dim = agent.state_dim
-            if agent_state_dim == 15:
-                return False
-            elif agent_state_dim > 15:
-                return True
-        
-        # Default to enhanced state
-        return True
+        # Setup feature extraction
+        self.feature_extractor = self.classifier
+        self._setup_feature_extraction()
 
     def _setup_feature_extraction(self):
         """Setup feature extraction from classifier's intermediate layers."""
@@ -98,7 +52,6 @@ class ImageAugmentationEnv:
         
         def feature_hook(module, input, output):
             # Extract features from the layer before the final classifier
-            # For VGG, this would be after the features but before classifier
             if hasattr(output, 'shape') and len(output.shape) >= 2:
                 # Global average pooling if spatial dimensions exist
                 if len(output.shape) == 4:  # [batch, channels, height, width]
@@ -116,7 +69,6 @@ class ImageAugmentationEnv:
             if hasattr(self.classifier.classifier, '__len__'):
                 # Sequential module
                 if len(self.classifier.classifier) > 0:
-                    # Hook on the first layer of classifier (usually after features)
                     self.classifier.classifier[0].register_forward_hook(feature_hook)
                     hook_registered = True
             elif hasattr(self.classifier.classifier, 'register_forward_hook'):
@@ -138,18 +90,14 @@ class ImageAugmentationEnv:
 
     def _extract_image_features(self, image_tensor):
         """
-        Extract image features using the classifier's intermediate representations.
-        Only called if using enhanced state.
+        Extract 128-dimensional image features using the classifier's intermediate representations.
         
         Args:
             image_tensor: Input image tensor [1, 3, 32, 32]
             
         Returns:
-            Feature vector of shape [image_feature_dim]
+            Feature vector of shape [128]
         """
-        if not self.use_enhanced_state:
-            return torch.zeros(0)  # Return empty tensor for original state
-            
         with torch.no_grad():
             if hasattr(self, '_use_penultimate_layer_features'):
                 # Alternative approach: modify forward pass to get intermediate features
@@ -195,10 +143,7 @@ class ImageAugmentationEnv:
             return features.squeeze(0)  # Remove batch dimension
 
     def _get_penultimate_features(self, image_tensor):
-        """
-        Alternative method to extract features from penultimate layer.
-        This method manually extracts features by modifying the forward pass.
-        """
+        """Alternative method to extract features from penultimate layer."""
         if hasattr(self.classifier, 'features') and hasattr(self.classifier, 'classifier'):
             # VGG-style architecture
             with torch.no_grad():
@@ -212,7 +157,6 @@ class ImageAugmentationEnv:
                         # Pass through all but the last layer
                         for i, layer in enumerate(self.classifier.classifier[:-1]):
                             x = layer(x)
-                    # If only one layer, x is already the features we want
                 elif hasattr(self.classifier.classifier, 'weight'):
                     # It's a single Linear layer, x is already the input features we want
                     pass
@@ -232,14 +176,8 @@ class ImageAugmentationEnv:
             # For other architectures, return None to use logits
             return None
 
-    def get_state_dim(self):
-        """Return the total state dimension."""
-        return self.total_state_dim
-
     def reset(self, image_tensor, true_label):
-        """
-        Initialize a new RL episode with adaptive state representation.
-        """
+        """Initialize a new RL episode."""
         self.original_image_tensor = image_tensor.to(self.device)
         self.augmented_image_tensor = self.original_image_tensor.clone()
         self.true_label = true_label
@@ -254,20 +192,17 @@ class ImageAugmentationEnv:
             self.initial_confidence = probabilities.max().item()
             self.initial_correct = (self.initial_prediction == self.true_label)
             
-            # Create state representation based on configuration
-            if self.use_enhanced_state:
-                state = self._create_enhanced_state_with_features(output, probabilities)
-            else:
-                state = self._create_original_state(output, probabilities)
+            # Create 143-dimensional state
+            state = self._create_state(output, probabilities)
 
         return state
 
-    def _create_enhanced_state_with_features(self, logits, probabilities):
+    def _create_state(self, logits, probabilities):
         """
-        Create enhanced state representation combining logits, confidence measures, and image features.
+        Create 143-dimensional state representation.
         
         Returns:
-            numpy array of shape [total_state_dim] = [logits_dim + additional_features_dim + image_feature_dim]
+            numpy array of shape [143] = [10 + 5 + 128]
         """
         # Basic logits (10 dimensions)
         logits_norm = F.normalize(logits.squeeze(0), dim=0)
@@ -284,52 +219,20 @@ class ImageAugmentationEnv:
         # Step information (1 dimension)
         step_ratio = self.current_step / self.max_steps
         
-        # Extract image features
+        # Extract image features (128 dimensions)
         image_features = self._extract_image_features(self.augmented_image_tensor.unsqueeze(0))
         
         # Combine all features
-        enhanced_state = torch.cat([
+        state = torch.cat([
             logits_norm.cpu(),
             torch.tensor([max_prob, entropy, confidence_margin, is_correct, step_ratio]),
             image_features.cpu()
         ])
         
-        return enhanced_state.numpy()
-
-    def _create_original_state(self, logits, probabilities):
-        """
-        Create original state representation (backward compatibility).
-        
-        Returns:
-            numpy array of shape [15] = [logits_dim + additional_features_dim]
-        """
-        # Basic logits (10 dimensions)
-        logits_norm = F.normalize(logits.squeeze(0), dim=0)
-        
-        # Confidence measures (3 dimensions)
-        max_prob = probabilities.max().item()
-        entropy = -torch.sum(probabilities * torch.log(probabilities + 1e-8)).item()
-        margin = torch.topk(probabilities, 2)[0]
-        confidence_margin = (margin[0, 0] - margin[0, 1]).item()
-        
-        # Prediction correctness indicator (1 dimension)
-        is_correct = float(torch.argmax(logits).item() == self.true_label)
-        
-        # Step information (1 dimension)
-        step_ratio = self.current_step / self.max_steps
-        
-        # Combine features (no image features)
-        original_state = torch.cat([
-            logits_norm.cpu(),
-            torch.tensor([max_prob, entropy, confidence_margin, is_correct, step_ratio])
-        ])
-        
-        return original_state.numpy()
+        return state.numpy()
 
     def step(self, action):
-        """
-        Execute action with improved reward function.
-        """
+        """Execute action and return next state."""
         self.current_step += 1
 
         # Store previous state for comparison
@@ -352,18 +255,15 @@ class ImageAugmentationEnv:
             confidence = probabilities.max().item()
             is_correct = (prediction == self.true_label)
 
-        # Improved reward calculation
-        reward = self._calculate_improved_reward(
+        # Calculate reward
+        reward = self._calculate_reward(
             prev_correct, is_correct, prev_confidence, confidence, action
         )
 
         done = self.current_step >= self.max_steps
         
-        # Create next state based on configuration
-        if self.use_enhanced_state:
-            next_state = self._create_enhanced_state_with_features(output, probabilities)
-        else:
-            next_state = self._create_original_state(output, probabilities)
+        # Create next state
+        next_state = self._create_state(output, probabilities)
 
         info = {
             'prediction': prediction,
@@ -372,19 +272,13 @@ class ImageAugmentationEnv:
             'is_correct': is_correct,
             'confidence_change': confidence - prev_confidence,
             'action_taken': action,
-            'state_type': 'enhanced' if self.use_enhanced_state else 'original',
             'state_dim': len(next_state)
         }
 
         return next_state, reward, done, info
 
-    def _calculate_improved_reward(self, prev_correct, curr_correct, prev_conf, curr_conf, action):
-        """
-        Calculate reward based on multiple factors:
-        1. Correctness improvement
-        2. Confidence changes
-        3. Action type penalties
-        """
+    def _calculate_reward(self, prev_correct, curr_correct, prev_conf, curr_conf, action):
+        """Calculate reward based on correctness and confidence improvements."""
         reward = 0.0
         
         # Primary reward: correctness improvement
@@ -420,9 +314,7 @@ class ImageAugmentationEnv:
         return reward
 
     def get_improvement_metrics(self):
-        """
-        Get metrics comparing initial vs final state.
-        """
+        """Get metrics comparing initial vs final state."""
         with torch.no_grad():
             final_output = self.classifier(self.augmented_image_tensor.unsqueeze(0))
             final_probabilities = F.softmax(final_output, dim=1)
@@ -438,6 +330,5 @@ class ImageAugmentationEnv:
             'correctness_improved': (not self.initial_correct) and final_correct,
             'confidence_improved': final_confidence > self.initial_confidence,
             'overall_improved': final_correct and (final_confidence > self.initial_confidence or not self.initial_correct),
-            'state_type': 'enhanced' if self.use_enhanced_state else 'original',
-            'state_dim': self.total_state_dim
+            'state_dim': self.state_dim
         }

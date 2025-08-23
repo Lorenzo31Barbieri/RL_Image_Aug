@@ -1,0 +1,38 @@
+{
+    "timestamp": "20250823_165514",
+    "config": {
+        "state_dim": 143,
+        "image_feature_dim": 128,
+        "samples_evaluated": {
+            "baseline": 10000,
+            "fixed_aug": 10000,
+            "tta": 1000,
+            "rl": 1000
+        }
+    },
+    "results": {
+        "baseline": {
+            "accuracy": 0.8028,
+            "avg_confidence": 0.8340357542037964,
+            "method_specific": {}
+        },
+        "fixed_aug": {
+            "accuracy": 0.8028,
+            "avg_confidence": 0.8340357542037964,
+            "method_specific": {}
+        },
+        "tta": {
+            "accuracy": 0.808,
+            "avg_confidence": 0.8279634721428156,
+            "method_specific": {}
+        },
+        "rl": {
+            "accuracy": 0.882,
+            "avg_confidence": 0.8299541774839163,
+            "method_specific": {
+                "avg_reward": 0.38323634397983564,
+                "improvements": 72
+            }
+        }
+    }
+}
