@@ -4,31 +4,18 @@ from typing import Dict, Any, Tuple
 from src.models.vgg import VGG
 from src.models.agent import DQNAgent
 
-# --- CONFIGURATION ---
-DEFAULT_CLASSIFIER_PATH = './checkpoint/ckpt.pth'
-DEFAULT_RL_MODEL_PATH = './models/best_dqn_model.pth'
-STATE_DIM = 143  # Fixed state dimension
-ACTION_DIM = 16  # Fixed action dimension
+# Import centralized configuration
+from config.evaluation_config import *
 
-
-def load_classifier(model_path: str = DEFAULT_CLASSIFIER_PATH,
+def load_classifier(model_path: str = None,
                    device: torch.device = None,
                    model_architecture: str = 'VGG19') -> torch.nn.Module:
     """
-    Load the pre-trained classifier.
-    
-    Args:
-        model_path: Path to the model file
-        device: Device to load the model on
-        model_architecture: Model architecture
-    
-    Returns:
-        Loaded and configured classifier model
-    
-    Raises:
-        FileNotFoundError: If the model file doesn't exist
-        ValueError: If the checkpoint has invalid format
+    Load the pre-trained classifier using centralized configuration.
     """
+    if model_path is None:
+        model_path = CLASSIFIER_PATH
+        
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
@@ -36,7 +23,6 @@ def load_classifier(model_path: str = DEFAULT_CLASSIFIER_PATH,
     print(f"Model path: {model_path}")
     print(f"Device: {device}")
     
-    # Check if file exists
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Classifier model not found at {model_path}")
     
@@ -44,7 +30,6 @@ def load_classifier(model_path: str = DEFAULT_CLASSIFIER_PATH,
     classifier_model = VGG(model_architecture).to(device)
     
     try:
-        # Load checkpoint
         checkpoint = torch.load(model_path, map_location=device)
         
         # Handle different checkpoint formats
@@ -59,15 +44,13 @@ def load_classifier(model_path: str = DEFAULT_CLASSIFIER_PATH,
                 state_dict = checkpoint['state_dict']
                 accuracy_info = 'Unknown'
             else:
-                # Assume checkpoint is directly the state_dict
                 state_dict = checkpoint
                 accuracy_info = 'Unknown'
         else:
-            # Assume checkpoint is directly the state_dict
             state_dict = checkpoint
             accuracy_info = 'Unknown'
         
-        # Remove 'module.' prefix if present (for DataParallel models)
+        # Remove 'module.' prefix if present
         new_state_dict = {}
         for k, v in state_dict.items():
             if k.startswith('module.'):
@@ -75,15 +58,14 @@ def load_classifier(model_path: str = DEFAULT_CLASSIFIER_PATH,
             else:
                 new_state_dict[k] = v
         
-        # Load weights into model
         classifier_model.load_state_dict(new_state_dict, strict=True)
         
-        print(f"Successfully loaded classifier from {model_path}")
+        print(f" Successfully loaded classifier from {model_path}")
         if accuracy_info != 'Unknown':
-            print(f"Reported accuracy: {accuracy_info}")
+            print(f" Reported accuracy: {accuracy_info}")
         
     except Exception as e:
-        print(f"Error loading classifier: {e}")
+        print(f" Error loading classifier: {e}")
         raise ValueError(f"Failed to load classifier from {model_path}: {e}")
     
     # Configure model for evaluation
@@ -91,22 +73,18 @@ def load_classifier(model_path: str = DEFAULT_CLASSIFIER_PATH,
     for param in classifier_model.parameters():
         param.requires_grad = False
     
-    print("Classifier loaded and frozen for evaluation")
+    print(" Classifier loaded and frozen for evaluation")
     return classifier_model
 
 
-def load_rl_agent(model_path: str = DEFAULT_RL_MODEL_PATH,
+def load_rl_agent(model_path: str = None,
                  device: torch.device = None) -> Tuple[DQNAgent, bool]:
     """
-    Load RL agent with fixed 143-dimensional state space.
-    
-    Args:
-        model_path: Path to the RL model file
-        device: Device for computation
-    
-    Returns:
-        Tuple (agent, model_loaded) where model_loaded indicates successful loading
+    Load RL agent using centralized configuration.
     """
+    if model_path is None:
+        model_path = RL_MODEL_PATH
+        
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
@@ -116,40 +94,31 @@ def load_rl_agent(model_path: str = DEFAULT_RL_MODEL_PATH,
     print(f"State dimension: {STATE_DIM}")
     print(f"Action dimension: {ACTION_DIM}")
     
-    # Initialize agent with fixed dimensions
+    # Initialize agent with centralized dimensions
     agent = DQNAgent(STATE_DIM, ACTION_DIM, device)
     model_loaded = False
     
     # Try to load model weights
     if os.path.exists(model_path):
         try:
-            # Load the model weights
             state_dict = torch.load(model_path, map_location=device)
             
-            # Load both Q-network and target Q-network
             agent.q_network.load_state_dict(state_dict)
             agent.target_q_network.load_state_dict(state_dict)
             
-            # Configure for evaluation
             agent.q_network.eval()
             agent.target_q_network.eval()
             agent.epsilon = 0  # Disable exploration for evaluation
             
             model_loaded = True
-            print(f"Successfully loaded RL agent from {model_path}")
+            print(f" Successfully loaded RL agent from {model_path}")
             
         except Exception as e:
-            print(f"Error loading RL agent from {model_path}: {e}")
-            print("Using randomly initialized agent...")
+            print(f" Error loading RL agent from {model_path}: {e}")
+            print(" Using randomly initialized agent...")
     else:
-        # Try alternative model paths
-        alternative_paths = [
-            './models/final_dqn_model.pth',
-            './models/dqn_episode_72000.pth',
-            './models/interrupted_dqn_model.pth'
-        ]
-        
-        for alt_path in alternative_paths:
+        # Try alternative paths from configuration
+        for alt_path in ALTERNATIVE_RL_PATHS:
             if os.path.exists(alt_path):
                 try:
                     state_dict = torch.load(alt_path, map_location=device)
@@ -160,38 +129,29 @@ def load_rl_agent(model_path: str = DEFAULT_RL_MODEL_PATH,
                     agent.epsilon = 0
                     
                     model_loaded = True
-                    print(f"Successfully loaded RL agent from {alt_path}")
+                    print(f" Successfully loaded RL agent from {alt_path}")
                     break
                     
                 except Exception as e:
                     continue
         
         if not model_loaded:
-            print(f"No valid RL model found. Using randomly initialized agent...")
+            print(f" No valid RL model found. Using randomly initialized agent...")
     
     return agent, model_loaded
 
 
 def get_model_info(model: torch.nn.Module) -> Dict[str, Any]:
-    """
-    Extract information about a PyTorch model.
-    
-    Args:
-        model: PyTorch model
-    
-    Returns:
-        Dict with model information
-    """
+    """Extract information about a PyTorch model."""
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     
-    # Determine model device
     try:
         model_device = next(model.parameters()).device
     except StopIteration:
         model_device = "No parameters"
     
-    # Try to get input dimension if it's a DQN agent
+    # Try to get input dimension
     input_dim = "Unknown"
     if hasattr(model, 'fc1') and hasattr(model.fc1, 'weight'):
         input_dim = model.fc1.weight.shape[1]
@@ -212,23 +172,13 @@ def get_model_info(model: torch.nn.Module) -> Dict[str, Any]:
 
 def validate_model_compatibility(classifier: torch.nn.Module,
                                agent: DQNAgent = None,
-                               expected_num_classes: int = 10) -> None:
-    """
-    Validate model compatibility.
-    
-    Args:
-        classifier: Classifier model
-        agent: RL agent (optional)
-        expected_num_classes: Expected number of classes
-    
-    Raises:
-        ValueError: If models are not compatible
-    """
-    print("Validating model compatibility...")
+                               expected_num_classes: int = LOGITS_DIM) -> None:
+    """Validate model compatibility using centralized configuration."""
+    print(" Validating model compatibility...")
     
     # Validate classifier
     classifier_info = get_model_info(classifier)
-    print(f"Classifier info: {classifier_info['model_type']} with {classifier_info['total_parameters']:,} parameters")
+    print(f" Classifier info: {classifier_info['model_type']} with {classifier_info['total_parameters']:,} parameters")
     
     # Test classifier with dummy input
     try:
@@ -239,18 +189,18 @@ def validate_model_compatibility(classifier: torch.nn.Module,
         if output.shape[1] != expected_num_classes:
             raise ValueError(f"Classifier output shape {output.shape[1]} doesn't match expected classes {expected_num_classes}")
         
-        print(f"Classifier validation passed - output shape: {output.shape}")
+        print(f" Classifier validation passed - output shape: {output.shape}")
         
     except Exception as e:
-        raise ValueError(f"Classifier validation failed: {e}")
+        raise ValueError(f" Classifier validation failed: {e}")
     
     # Validate RL agent if provided
     if agent is not None:
         agent_info = get_model_info(agent.q_network)
         
-        print(f"RL Agent info: {agent_info['model_type']} with {agent_info['total_parameters']:,} parameters")
-        print(f"Agent state dimension: {agent.state_dim}")
-        print(f"Agent action dimension: {agent.action_dim}")
+        print(f" RL Agent info: {agent_info['model_type']} with {agent_info['total_parameters']:,} parameters")
+        print(f" Agent state dimension: {agent.state_dim}")
+        print(f" Agent action dimension: {agent.action_dim}")
         
         # Test agent with dummy state
         try:
@@ -261,25 +211,18 @@ def validate_model_compatibility(classifier: torch.nn.Module,
             if q_values.shape[1] != agent.action_dim:
                 raise ValueError(f"Agent output shape {q_values.shape[1]} doesn't match expected actions {agent.action_dim}")
             
-            print(f"RL Agent validation passed - Q-values shape: {q_values.shape}")
+            print(f" RL Agent validation passed - Q-values shape: {q_values.shape}")
             
         except Exception as e:
-            raise ValueError(f"RL Agent validation failed: {e}")
+            raise ValueError(f" RL Agent validation failed: {e}")
     
-    print("All models validated successfully!")
+    print(" All models validated successfully!")
 
 
 def print_loading_summary(classifier: torch.nn.Module,
                         agent: DQNAgent = None,
                         agent_loaded: bool = False) -> None:
-    """
-    Print a summary of loaded models.
-    
-    Args:
-        classifier: Loaded classifier model
-        agent: RL agent (optional)
-        agent_loaded: Whether agent was loaded successfully
-    """
+    """Print a summary of loaded models using centralized configuration."""
     print(f"\n{'='*60}")
     print("MODEL LOADING SUMMARY")
     print(f"{'='*60}")
@@ -302,11 +245,11 @@ def print_loading_summary(classifier: torch.nn.Module,
         print(f"  Status: {status}")
         print(f"  Parameters: {agent_info['total_parameters']:,}")
         print(f"  State dim: {agent.state_dim}, Action dim: {agent.action_dim}")
-        print(f"  Fixed 143D State Space:")
-        print(f"    - Logits: 10")
-        print(f"    - Additional features: 5")
-        print(f"    - Image features: 128")
-        print(f"    - Total: 143")
+        print(f"  Fixed {STATE_DIM}D State Space:")
+        print(f"    - Logits: {LOGITS_DIM}")
+        print(f"    - Additional features: {ADDITIONAL_FEATURES_DIM}")
+        print(f"    - Image features: {IMAGE_FEATURE_DIM}")
+        print(f"    - Total: {STATE_DIM}")
         print(f"  Epsilon: {agent.epsilon} (exploration disabled)")
         print(f"  Device: {agent_info['model_device']}")
         print(f"  Network input dim: {agent_info['input_dimension']}")
@@ -315,15 +258,7 @@ def print_loading_summary(classifier: torch.nn.Module,
 
 
 def detect_available_rl_models(base_dir: str = './models') -> Dict[str, Dict[str, Any]]:
-    """
-    Detect available RL models and their characteristics.
-    
-    Args:
-        base_dir: Base directory to search for models
-    
-    Returns:
-        Dict with information about found models
-    """
+    """Detect available RL models and their characteristics using centralized config."""
     available_models = {}
     
     if not os.path.exists(base_dir):
@@ -334,7 +269,6 @@ def detect_available_rl_models(base_dir: str = './models') -> Dict[str, Dict[str
             filepath = os.path.join(base_dir, filename)
             
             try:
-                # Load model to inspect dimensions
                 state_dict = torch.load(filepath, map_location='cpu')
                 
                 # Find input dimension
@@ -344,7 +278,7 @@ def detect_available_rl_models(base_dir: str = './models') -> Dict[str, Dict[str
                         input_dim = tensor.shape[1]
                         break
                 
-                # Check compatibility with 143D state space
+                # Check compatibility with centralized STATE_DIM
                 compatible = input_dim == STATE_DIM if input_dim else False
                 
                 available_models[filename] = {
@@ -355,17 +289,17 @@ def detect_available_rl_models(base_dir: str = './models') -> Dict[str, Dict[str
                 }
                 
             except Exception as e:
-                print(f"Could not inspect model {filename}: {e}")
+                print(f" Could not inspect model {filename}: {e}")
     
     return available_models
 
 
 def print_available_models() -> None:
-    """Print available RL models."""
+    """Print available RL models using centralized configuration."""
     models = detect_available_rl_models()
     
     if not models:
-        print("No RL models found in ./models/")
+        print(" No RL models found in ./models/")
         return
     
     print(f"\n AVAILABLE RL MODELS:")
@@ -381,18 +315,18 @@ def print_available_models() -> None:
             incompatible_models.append((filename, info))
     
     if compatible_models:
-        print(" Compatible Models (143D state space):")
+        print(f" Compatible Models ({STATE_DIM}D state space):")
         for filename, info in compatible_models:
             size_mb = info['file_size'] / (1024 * 1024)
-            print(f"  {filename}")
+            print(f"   {filename}")
             print(f"    State dim: {info['state_dim']}")
             print(f"    Size: {size_mb:.1f} MB")
     
     if incompatible_models:
-        print("\n Incompatible Models (wrong state dimension):")
+        print(f"\n Incompatible Models (wrong state dimension):")
         for filename, info in incompatible_models:
             size_mb = info['file_size'] / (1024 * 1024)
-            print(f"  {filename}")
+            print(f"   {filename}")
             print(f"    State dim: {info['state_dim']} (expected: {STATE_DIM})")
             print(f"    Size: {size_mb:.1f} MB")
     

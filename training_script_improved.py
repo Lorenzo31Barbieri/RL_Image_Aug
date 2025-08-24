@@ -16,45 +16,15 @@ from src.environment.environment import ImageAugmentationEnv
 from src.environment.transforms import get_num_actions
 from src.models.vgg import VGG
 
-# --- CONFIGURATION ---
+# Import centralized configuration
+from config.training_config import *
+
+# --- DEVICE SETUP ---
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {DEVICE}")
 
-# Dataset and Path Configuration
-DATA_ROOT_DIR = './data'
-PRE_TRAINED_CLASSIFIER_PATH = './checkpoint/ckpt.pth'
-
-# State space configuration (fixed to 143 dimensions)
-IMAGE_FEATURE_DIM = 128
-LOGITS_DIM = 10  # CIFAR-10
-ADDITIONAL_FEATURES_DIM = 5  # confidence, entropy, margin, correctness, step_info
-STATE_DIM = LOGITS_DIM + ADDITIONAL_FEATURES_DIM + IMAGE_FEATURE_DIM  # 143
-
-ACTION_DIM = get_num_actions()
-
-print(f"State dimension: {STATE_DIM} (logits: {LOGITS_DIM}, additional: {ADDITIONAL_FEATURES_DIM}, image features: {IMAGE_FEATURE_DIM})")
-print(f"Action dimension: {ACTION_DIM}")
-
-# Training hyperparameters
-learning_rate = 0.0005
-gamma = 0.99
-epsilon_start = 1.0
-epsilon_end = 0.01
-epsilon_decay = 0.99975
-buffer_size = 50000
-batch_size = 64
-target_update_freq = 2000
-num_total_episodes = 50000
-max_steps_per_episode = 3
-images_per_cycle = 4
-
-# Training strategy parameters
-warmup_episodes = 2000
-eval_freq = 2000
-eval_episodes = 200
-patience = 100
-best_eval_reward = float('-inf')
-patience_counter = 0
+# Print configuration
+print_config()
 
 # Global training data for signal handler
 training_data = {
@@ -72,7 +42,7 @@ def load_classifier_model():
     classifier_model = VGG('VGG19').to(DEVICE)
     
     try:
-        checkpoint = torch.load(PRE_TRAINED_CLASSIFIER_PATH, map_location=DEVICE)
+        checkpoint = torch.load(CLASSIFIER_PATH, map_location=DEVICE)
         
         # Handle DataParallel state dict
         new_state_dict = {}
@@ -83,11 +53,11 @@ def load_classifier_model():
                 new_state_dict[k] = v
         
         classifier_model.load_state_dict(new_state_dict, strict=True)
-        print(f"Successfully loaded classifier from {PRE_TRAINED_CLASSIFIER_PATH}")
+        print(f"Successfully loaded classifier from {CLASSIFIER_PATH}")
         print(f"Classifier accuracy from checkpoint: {checkpoint['acc']:.2f}%")
         
     except FileNotFoundError:
-        print(f"Error: Classifier .pth file not found at {PRE_TRAINED_CLASSIFIER_PATH}")
+        print(f"Error: Classifier .pth file not found at {CLASSIFIER_PATH}")
         exit()
     except Exception as e:
         print(f"Error loading classifier: {e}")
@@ -100,7 +70,7 @@ def load_classifier_model():
     return classifier_model
 
 
-def evaluate_agent(agent, classifier_model, eval_episodes=200):
+def evaluate_agent(agent, classifier_model, eval_episodes=EVAL_EPISODES):
     """Evaluate agent performance."""
     print(f"\nEvaluating agent for {eval_episodes} episodes...")
     
@@ -110,7 +80,7 @@ def evaluate_agent(agent, classifier_model, eval_episodes=200):
     ])
     
     eval_dataset = torchvision.datasets.CIFAR10(
-        root=DATA_ROOT_DIR, train=False, download=False, transform=eval_transform)
+        root=DATA_ROOT, train=False, download=False, transform=eval_transform)
     eval_loader = torch.utils.data.DataLoader(
         eval_dataset, batch_size=1, shuffle=True, num_workers=0)
     eval_iter = iter(eval_loader)
@@ -142,7 +112,7 @@ def evaluate_agent(agent, classifier_model, eval_episodes=200):
         # Create environment
         env = ImageAugmentationEnv(
             classifier=classifier_model,
-            max_steps=max_steps_per_episode,
+            max_steps=MAX_STEPS_PER_EPISODE,
             device=DEVICE,
             image_feature_dim=IMAGE_FEATURE_DIM
         )
@@ -216,6 +186,10 @@ def evaluate_agent(agent, classifier_model, eval_episodes=200):
 def train_rl_agent():
     """Main training function."""
     global training_data
+    
+    # Ensure directories exist
+    ensure_directories()
+    
     classifier_model = load_classifier_model()
 
     # Prepare dataset
@@ -226,7 +200,7 @@ def train_rl_agent():
 
     # Use training set for RL training
     rl_episode_dataset = torchvision.datasets.CIFAR10(
-        root=DATA_ROOT_DIR, train=True, download=True, transform=preprocess_for_rl_env)
+        root=DATA_ROOT, train=True, download=True, transform=preprocess_for_rl_env)
     
     rl_episode_loader = torch.utils.data.DataLoader(
         rl_episode_dataset, batch_size=1, shuffle=True, num_workers=0)
@@ -234,9 +208,9 @@ def train_rl_agent():
 
     # Initialize agent
     agent = DQNAgent(
-        STATE_DIM, ACTION_DIM, DEVICE, gamma, learning_rate,
-        epsilon_start, epsilon_end, epsilon_decay, buffer_size,
-        batch_size, target_update_freq, double_dqn=True, prioritized_replay=False
+        STATE_DIM, ACTION_DIM, DEVICE, GAMMA, LEARNING_RATE,
+        EPSILON_START, EPSILON_END, EPSILON_DECAY, BUFFER_SIZE,
+        BATCH_SIZE, TARGET_UPDATE_FREQ, double_dqn=True, prioritized_replay=False
     )
 
     training_data['agent'] = agent
@@ -252,10 +226,11 @@ def train_rl_agent():
     recent_losses = deque(maxlen=200)
     
     # Early stopping variables
-    global best_eval_reward, patience_counter
+    best_eval_reward = float('-inf')
+    patience_counter = 0
     
     print(f"\nStarting RL Agent training...")
-    print(f"Training for {num_total_episodes} episodes")
+    print(f"Training for {NUM_TOTAL_EPISODES} episodes")
     print(f"State dim: {STATE_DIM}, Action dim: {ACTION_DIM}")
     print(f"Image feature dimension: {IMAGE_FEATURE_DIM}")
     
@@ -265,7 +240,7 @@ def train_rl_agent():
     
     # Pre-fill replay buffer
     print("Pre-filling replay buffer...")
-    prefill_episodes = min(2000, num_total_episodes // 10)
+    prefill_episodes = min(2000, NUM_TOTAL_EPISODES // 10)
     for _ in tqdm(range(prefill_episodes), desc="Pre-filling"):
         try:
             image_tensor, true_label_tensor = next(rl_episode_iter)
@@ -278,7 +253,7 @@ def train_rl_agent():
         
         env = ImageAugmentationEnv(
             classifier=classifier_model,
-            max_steps=max_steps_per_episode,
+            max_steps=MAX_STEPS_PER_EPISODE,
             device=DEVICE,
             image_feature_dim=IMAGE_FEATURE_DIM
         )
@@ -291,7 +266,7 @@ def train_rl_agent():
         
         done = False
         steps = 0
-        while not done and steps < max_steps_per_episode:
+        while not done and steps < MAX_STEPS_PER_EPISODE:
             action = agent.select_action(state)
             next_state, reward, done, _ = env.step(action)
             agent.store_experience(state, action, reward, next_state, done)
@@ -302,12 +277,12 @@ def train_rl_agent():
     print(f"State verification: First state shape = {len(state)}")
     
     # Main training loop
-    for episode in range(num_total_episodes):
+    for episode in range(NUM_TOTAL_EPISODES):
         global_episode_counter += 1
         episode_reward = 0
         
         # Get new image every 'images_per_cycle' episodes
-        if episode % images_per_cycle == 0:
+        if episode % IMAGES_PER_CYCLE == 0:
             try:
                 image_tensor_for_episode, true_label_for_episode_tensor = next(rl_episode_iter)
             except StopIteration:
@@ -320,21 +295,21 @@ def train_rl_agent():
         # Initialize environment
         env = ImageAugmentationEnv(
             classifier=classifier_model,
-            max_steps=max_steps_per_episode,
+            max_steps=MAX_STEPS_PER_EPISODE,
             device=DEVICE,
             image_feature_dim=IMAGE_FEATURE_DIM
         )
         state = env.reset(current_image, current_label)
         
         # Skip easy examples after warmup
-        if episode > warmup_episodes and env.initial_correct and env.initial_confidence > 0.95:
+        if episode > WARMUP_EPISODES and env.initial_correct and env.initial_confidence > 0.95:
             if np.random.random() < 0.7:  # Skip 70% of such easy examples
                 continue
         
         # Run episode
         done = False
         steps = 0
-        while not done and steps < max_steps_per_episode:
+        while not done and steps < MAX_STEPS_PER_EPISODE:
             action = agent.select_action(state)
             next_state, reward, done, info = env.step(action)
             
@@ -345,7 +320,7 @@ def train_rl_agent():
             steps += 1
 
             # Learning step
-            if len(agent.replay_buffer) > batch_size and episode > warmup_episodes:
+            if len(agent.replay_buffer) > BATCH_SIZE and episode > WARMUP_EPISODES:
                 if episode % 4 == 0:
                     for _ in range(2):  # Multiple learning steps
                         loss_item = agent.learn()
@@ -362,7 +337,7 @@ def train_rl_agent():
         training_data['evaluation_history'] = evaluation_history
 
         # Epsilon decay (adaptive)
-        if episode > warmup_episodes:
+        if episode > WARMUP_EPISODES:
             if episode < 15000:
                 current_epsilon_decay = 0.999925
             elif episode < 45000:
@@ -383,7 +358,7 @@ def train_rl_agent():
             action_dist = agent.get_action_distribution()
             most_used_action = np.argmax(action_dist)
             
-            print(f"Episode {global_episode_counter}/{num_total_episodes} | "
+            print(f"Episode {global_episode_counter}/{NUM_TOTAL_EPISODES} | "
                   f"Avg Reward: {avg_reward:.3f} | "
                   f"Avg Loss: {avg_loss:.4f} | "
                   f"Epsilon: {agent.epsilon:.3f} | "
@@ -391,8 +366,8 @@ def train_rl_agent():
                   f"EPS/s: {episodes_per_second:.1f}")
         
         # Evaluation and early stopping
-        if global_episode_counter % eval_freq == 0 and global_episode_counter > warmup_episodes:
-            eval_results = evaluate_agent(agent, classifier_model, eval_episodes)
+        if global_episode_counter % EVAL_FREQ == 0 and global_episode_counter > WARMUP_EPISODES:
+            eval_results = evaluate_agent(agent, classifier_model, EVAL_EPISODES)
             evaluation_history.append((global_episode_counter, eval_results))
             training_data['evaluation_history'] = evaluation_history
             
@@ -404,24 +379,20 @@ def train_rl_agent():
                 patience_counter = 0
                 
                 # Save best model
-                if not os.path.exists('./models'):
-                    os.makedirs('./models')
-                torch.save(agent.q_network.state_dict(), './models/best_dqn_model.pth')
-                print(f" New best model saved! Eval reward: {eval_reward:.3f}")
+                torch.save(agent.q_network.state_dict(), BEST_MODEL_PATH)
+                print(f"✓ New best model saved! Eval reward: {eval_reward:.3f}")
             else:
                 patience_counter += 1
-                print(f"No improvement. Patience: {patience_counter}/{patience}")
+                print(f"No improvement. Patience: {patience_counter}/{PATIENCE}")
                 
-                if patience_counter >= patience:
+                if patience_counter >= PATIENCE:
                     print(f"Early stopping at episode {global_episode_counter}")
                     break
         
         # Periodic model saving
         if global_episode_counter % 3000 == 0:
-            if not os.path.exists('./models'):
-                os.makedirs('./models')
-            torch.save(agent.q_network.state_dict(), 
-                      f'./models/dqn_episode_{global_episode_counter}.pth')
+            checkpoint_path = os.path.join(MODELS_DIR, f'dqn_episode_{global_episode_counter}.pth')
+            torch.save(agent.q_network.state_dict(), checkpoint_path)
             print(f"Checkpoint saved at episode {global_episode_counter}")
     
     print("\nRL Agent training finished.")
@@ -430,12 +401,10 @@ def train_rl_agent():
     print("\n" + "="*50)
     print("FINAL EVALUATION")
     print("="*50)
-    final_eval_results = evaluate_agent(agent, classifier_model, eval_episodes * 2)
+    final_eval_results = evaluate_agent(agent, classifier_model, EVAL_EPISODES * 2)
     
     # Save final model
-    if not os.path.exists('./models'):
-        os.makedirs('./models')
-    torch.save(agent.q_network.state_dict(), './models/final_dqn_model.pth')
+    torch.save(agent.q_network.state_dict(), FINAL_MODEL_PATH)
     
     # Create plots
     create_training_plots(episode_rewards, loss_history, evaluation_history, agent)
@@ -451,11 +420,8 @@ def signal_handler(sig, frame):
     try:
         # Save current model
         if training_data['agent'] is not None:
-            if not os.path.exists('./models'):
-                os.makedirs('./models')
-            torch.save(training_data['agent'].q_network.state_dict(), 
-                      './models/interrupted_dqn_model.pth')
-            print(' Model saved as: ./models/interrupted_dqn_model.pth')
+            torch.save(training_data['agent'].q_network.state_dict(), INTERRUPTED_MODEL_PATH)
+            print(f'✓ Model saved as: {INTERRUPTED_MODEL_PATH}')
         
         # Create plots with current data
         if len(training_data['episode_rewards']) > 0:
@@ -465,7 +431,7 @@ def signal_handler(sig, frame):
                 training_data['evaluation_history'],
                 training_data['agent']
             )
-            print(' Plots saved to: ./plots/training_analysis.png')
+            print(f'✓ Plots saved to: {TRAINING_PLOTS_PATH}')
         
         # Print summary
         if len(training_data['episode_rewards']) > 0:
@@ -493,9 +459,6 @@ signal.signal(signal.SIGINT, signal_handler)
 
 def create_training_plots(episode_rewards, loss_history, evaluation_history, agent):
     """Create comprehensive training visualization plots."""
-    
-    if not os.path.exists('./plots'):
-        os.makedirs('./plots')
     
     fig, axes = plt.subplots(2, 3, figsize=(18, 12))
     
@@ -619,10 +582,10 @@ Positive Episodes: {(np.array(episode_rewards) > 0).mean():.1%}
     ax6.set_title('Training Statistics Summary')
     
     plt.tight_layout()
-    plt.savefig('./plots/training_analysis.png', dpi=300, bbox_inches='tight')
+    plt.savefig(TRAINING_PLOTS_PATH, dpi=300, bbox_inches='tight')
     plt.show()
     
-    print("Training plots saved to './plots/training_analysis.png'")
+    print(f"Training plots saved to '{TRAINING_PLOTS_PATH}'")
 
 
 if __name__ == '__main__':

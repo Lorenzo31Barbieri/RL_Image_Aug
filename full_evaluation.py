@@ -3,9 +3,9 @@
 MODEL EVALUATION
 ===============================================================
 
-Streamlined evaluation script for 143-dimensional state space.
+Streamlined evaluation script.
 
-Usage: python full_evaluation.py [--quick] [--samples N]
+Usage: python full_evaluation.py [--quick] [--interactive]
 """
 
 import sys
@@ -19,6 +19,9 @@ from datetime import datetime
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
+# Import centralized configuration
+from config.evaluation_config import *
+
 # Import modules
 from evaluation.core.model_loader import load_classifier, load_rl_agent, print_loading_summary
 from evaluation.core.data_utils import get_cifar10_test_dataset, get_cifar10_test_loader
@@ -26,24 +29,23 @@ from evaluation.methods.evaluate_baseline import evaluate_baseline
 from evaluation.methods.evaluate_fixed_aug import evaluate_fixed_augmentation
 from evaluation.methods.evaluate_tta import evaluate_tta
 from evaluation.methods.evaluate_rl_agent import evaluate_rl_agent, test_agent_environment_compatibility
-from evaluation.runner.config_manager import ConfigManager, EvaluationConfig
 
 
 class EvaluationRunner:
-    """Evaluation runner for 143D state space."""
+    """Evaluation runner using centralized configuration."""
     
-    def __init__(self, config: EvaluationConfig):
+    def __init__(self, config):
         self.config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.results = {}
         
         # Setup output directories
-        os.makedirs(self.config.output_dir, exist_ok=True)
-        os.makedirs(f"{self.config.output_dir}/plots", exist_ok=True)
+        os.makedirs(self.config['output_dir'], exist_ok=True)
+        os.makedirs(f"{self.config['output_dir']}/plots", exist_ok=True)
         
         print(f" EVALUATION (143D State Space)")
         print(f"Device: {self.device}")
-        print(f"Output: {self.config.output_dir}")
+        print(f"Output: {self.config['output_dir']}")
     
     def run_complete_evaluation(self):
         """Run the complete evaluation pipeline."""
@@ -52,27 +54,21 @@ class EvaluationRunner:
             print("STARTING EVALUATION")
             print("=" * 60)
             
-            # 1. Validate configuration
-            is_valid, errors = ConfigManager.validate_config(self.config)
-            if not is_valid:
-                print("Configuration validation failed:")
-                for error in errors:
-                    print(f"  - {error}")
-                return None
+            print_config(self.config)
             
-            # 2. Load models
+            # 1. Load models
             self._load_models()
             
-            # 3. Load data
+            # 2. Load data
             self._load_data()
             
-            # 4. Run evaluations
+            # 3. Run evaluations
             self._run_all_evaluations()
             
-            # 5. Generate results
+            # 4. Generate results
             self._generate_outputs()
             
-            print("\nEvaluation completed successfully!")
+            print("\n Evaluation completed successfully!")
             return self.results
             
         except KeyboardInterrupt:
@@ -91,7 +87,7 @@ class EvaluationRunner:
         
         # Load classifier
         self.classifier = load_classifier(
-            model_path=self.config.classifier_path,
+            model_path=self.config['classifier_path'],
             device=self.device
         )
         
@@ -99,16 +95,28 @@ class EvaluationRunner:
         self.agent = None
         self.rl_model_loaded = False
         
-        if self.config.evaluate_rl:
-            self.agent, self.rl_model_loaded = load_rl_agent(
-                model_path=self.config.rl_model_path,
-                device=self.device
-            )
+        if self.config['evaluate_rl']:
+            # Try main path first, then alternatives
+            rl_paths_to_try = [self.config['rl_model_path']] + ALTERNATIVE_RL_PATHS
             
-            # Test compatibility
+            for rl_path in rl_paths_to_try:
+                if os.path.exists(rl_path):
+                    try:
+                        self.agent, self.rl_model_loaded = load_rl_agent(
+                            model_path=rl_path,
+                            device=self.device
+                        )
+                        if self.rl_model_loaded:
+                            print(f" RL model loaded from: {rl_path}")
+                            break
+                    except Exception as e:
+                        print(f" Failed to load RL model from {rl_path}: {e}")
+                        continue
+            
+            # Test compatibility if agent was loaded
             if self.agent and self.rl_model_loaded:
                 compatibility = test_agent_environment_compatibility(
-                    self.agent, self.classifier, self.device, self.config.image_feature_dim
+                    self.agent, self.classifier, self.device, self.config['image_feature_dim']
                 )
                 
                 if not compatibility['compatible']:
@@ -131,12 +139,12 @@ class EvaluationRunner:
         
         # Load dataset and dataloader
         self.test_dataset = get_cifar10_test_dataset(
-            data_root=self.config.data_root
+            data_root=self.config['data_root']
         )
         
         self.test_loader = get_cifar10_test_loader(
-            data_root=self.config.data_root,
-            batch_size=self.config.batch_size
+            data_root=self.config['data_root'],
+            batch_size=self.config['batch_size']
         )
         
         print(f" Test dataset loaded: {len(self.test_dataset)} samples")
@@ -150,45 +158,45 @@ class EvaluationRunner:
         start_time = datetime.now()
         
         # 1. Baseline evaluation
-        if self.config.evaluate_baseline:
+        if self.config['evaluate_baseline']:
             print("\n Running baseline evaluation...")
             self.results['baseline'] = evaluate_baseline(
                 classifier_model=self.classifier,
                 test_dataset=self.test_dataset,
                 device=self.device,
-                num_samples=self.config.baseline_samples,
-                batch_size=self.config.batch_size,
+                num_samples=self.config['baseline_samples'],
+                batch_size=self.config['batch_size'],
                 verbose=True,
                 return_details=True
             )
         
         # 2. Fixed augmentation evaluation
-        if self.config.evaluate_fixed_aug:
+        if self.config['evaluate_fixed_aug']:
             print("\n Running fixed augmentation evaluation...")
             self.results['fixed_aug'] = evaluate_fixed_augmentation(
                 classifier_model=self.classifier,
                 test_dataset=self.test_dataset,
-                augmentation_ids=self.config.fixed_aug_ids,
+                augmentation_ids=self.config['fixed_aug_ids'],
                 device=self.device,
-                num_samples=self.config.fixed_aug_samples,
-                batch_size=self.config.batch_size,
+                num_samples=self.config['fixed_aug_samples'],
+                batch_size=self.config['batch_size'],
                 verbose=True
             )
         
         # 3. TTA evaluation
-        if self.config.evaluate_tta:
+        if self.config['evaluate_tta']:
             print("\n Running TTA evaluation...")
             self.results['tta'] = evaluate_tta(
                 classifier_model=self.classifier,
                 test_dataset=self.test_dataset,
                 device=self.device,
-                num_samples=self.config.tta_samples,
-                use_ttach=True,
+                num_samples=self.config['tta_samples'],
+                use_ttach=self.config['use_ttach'],
                 verbose=True
             )
         
         # 4. RL agent evaluation
-        if self.config.evaluate_rl and self.agent:
+        if self.config['evaluate_rl'] and self.agent:
             print("\n Running RL agent evaluation...")
             try:
                 self.results['rl'] = evaluate_rl_agent(
@@ -196,9 +204,9 @@ class EvaluationRunner:
                     classifier_model=self.classifier,
                     test_dataset=self.test_dataset,
                     device=self.device,
-                    num_episodes=self.config.rl_episodes,
-                    max_steps_per_episode=self.config.max_steps_per_episode,
-                    image_feature_dim=self.config.image_feature_dim,
+                    num_episodes=self.config['rl_episodes'],
+                    max_steps_per_episode=self.config['max_steps_per_episode'],
+                    image_feature_dim=self.config['image_feature_dim'],
                     verbose=True,
                     return_details=True
                 )
@@ -225,16 +233,16 @@ class EvaluationRunner:
         self._print_comparison_summary()
         
         # Save results
-        if self.config.save_results:
+        if self.config['save_results']:
             self._save_results()
         
         # Create plots
-        if self.config.create_plots:
+        if self.config['create_plots']:
             try:
                 self._create_comprehensive_plots()
-                print("Comprehensive plots created successfully")
+                print(" Comprehensive plots created successfully")
             except Exception as e:
-                print(f"Error creating plots: {e}")
+                print(f" Error creating plots: {e}")
     
     def _print_comparison_summary(self):
         """Print comparison summary."""
@@ -259,8 +267,8 @@ class EvaluationRunner:
         if 'rl' in self.results and 'accuracy' in self.results['rl']:
             acc = self.results['rl']['accuracy']
             imp = acc - baseline_acc
-            model_status = "OK" if self.results['rl'].get('model_loaded', False) else "RANDOM"
-            print(f"RL Agent:        {acc:.4f} ({imp:+.4f}) [{model_status}]")
+            model_status = "" if self.results['rl'].get('model_loaded', False) else "🎲"
+            print(f"RL Agent:        {acc:.4f} ({imp:+.4f}) {model_status}")
         
         # Find best method
         best_method = "baseline"
@@ -286,25 +294,25 @@ class EvaluationRunner:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         # Save complete results as pickle
-        results_file = f"{self.config.output_dir}/results_{timestamp}.pkl"
+        results_file = f"{self.config['output_dir']}/results_{timestamp}.pkl"
         with open(results_file, 'wb') as f:
             pickle.dump({
                 'results': self.results,
-                'config': self.config.__dict__,
+                'config': self.config,
                 'timestamp': timestamp
             }, f)
         
         # Save summary as JSON
         summary = {
             'timestamp': timestamp,
-            'config': {
-                'state_dim': self.config.state_dim,
-                'image_feature_dim': self.config.image_feature_dim,
+            'config_summary': {
+                'state_dim': self.config['state_dim'],
+                'image_feature_dim': self.config['image_feature_dim'],
                 'samples_evaluated': {
-                    'baseline': self.config.baseline_samples,
-                    'fixed_aug': self.config.fixed_aug_samples,
-                    'tta': self.config.tta_samples,
-                    'rl': self.config.rl_episodes
+                    'baseline': self.config['baseline_samples'],
+                    'fixed_aug': self.config['fixed_aug_samples'],
+                    'tta': self.config['tta_samples'],
+                    'rl': self.config['rl_episodes']
                 }
             },
             'results': {}
@@ -323,7 +331,7 @@ class EvaluationRunner:
                     summary['results'][method]['method_specific']['avg_reward'] = float(result['avg_reward'])
                     summary['results'][method]['method_specific']['improvements'] = int(result.get('improvements', 0))
         
-        summary_file = f"{self.config.output_dir}/summary_{timestamp}.json"
+        summary_file = f"{self.config['output_dir']}/summary_{timestamp}.json"
         with open(summary_file, 'w') as f:
             json.dump(summary, f, indent=4)
         
@@ -332,42 +340,42 @@ class EvaluationRunner:
         print(f"   Summary: {summary_file}")
     
     def _create_comprehensive_plots(self):
-        """Create comprehensive comparison plots like the original."""
+        """Create comprehensive comparison plots."""
         try:
             import matplotlib.pyplot as plt
             import seaborn as sns
             import numpy as np
             from sklearn.metrics import confusion_matrix
         except ImportError:
-            print("Required plotting libraries not available")
+            print(" Required plotting libraries not available")
             return
         
         # Create the main 2x3 comparison plot
         fig, axes = plt.subplots(2, 3, figsize=(18, 12))
         fig.suptitle('Comprehensive Model Comparison - 143D State Space', fontsize=16, fontweight='bold')
         
-        # Plot 1: Accuracy Comparison (top-left)
+        # Plot 1: Accuracy Comparison
         self._plot_accuracy_comparison(axes[0, 0])
         
-        # Plot 2: Transformation Usage (top-middle)
+        # Plot 2: Transformation Usage
         self._plot_transformation_usage(axes[0, 1])
         
-        # Plot 3: Confidence Comparison (top-right)
+        # Plot 3: Confidence Comparison
         self._plot_confidence_comparison(axes[0, 2])
         
-        # Plot 4: Outcome Changes (bottom-left)
+        # Plot 4: Outcome Changes
         self._plot_outcome_changes(axes[1, 0])
         
-        # Plot 5: Timing Comparison (bottom-middle)
+        # Plot 5: Timing Comparison
         self._plot_timing_comparison(axes[1, 1])
         
-        # Plot 6: Performance Summary (bottom-right)
+        # Plot 6: Performance Summary
         self._plot_performance_summary(axes[1, 2])
         
         plt.tight_layout()
         
         # Save main comparison plot
-        main_plot_path = f"{self.config.output_dir}/plots/comprehensive_comparison.png"
+        main_plot_path = f"{self.config['output_dir']}/plots/comprehensive_comparison.png"
         plt.savefig(main_plot_path, dpi=300, bbox_inches='tight')
         plt.close()
         
@@ -403,7 +411,6 @@ class EvaluationRunner:
         if methods:
             bars = ax.bar(methods, accuracies, color=colors, edgecolor='black', alpha=0.8)
             
-            # Add values on bars
             for bar, acc in zip(bars, accuracies):
                 height = bar.get_height()
                 ax.text(bar.get_x() + bar.get_width()/2., height + 0.002,
@@ -429,7 +436,6 @@ class EvaluationRunner:
             ax.set_title('Transformation Usage Frequency', fontweight='bold', fontsize=12)
             return
         
-        # Sort by usage and take top 10
         sorted_actions = sorted(action_counts.items(), key=lambda x: x[1], reverse=True)
         top_n = min(10, len(sorted_actions))
         
@@ -468,7 +474,6 @@ class EvaluationRunner:
         if methods:
             bars = ax.bar(methods, confidences, color=colors, edgecolor='black', alpha=0.8)
             
-            # Add values on bars
             for bar, conf in zip(bars, confidences):
                 height = bar.get_height()
                 ax.text(bar.get_x() + bar.get_width()/2., height + 0.01,
@@ -487,7 +492,6 @@ class EvaluationRunner:
         degradations = 0
         no_change = 1000
         
-        # Try to get real data from RL results
         if 'rl' in self.results:
             improvements = self.results['rl'].get('improvements', 0)
             degradations = self.results['rl'].get('degradations', 0) 
@@ -540,7 +544,6 @@ class EvaluationRunner:
         if methods:
             bars = ax.bar(methods, times, color=colors, edgecolor='black', alpha=0.8)
             
-            # Add values on bars
             for bar, time_val in zip(bars, times):
                 height = bar.get_height()
                 ax.text(bar.get_x() + bar.get_width()/2., height + max(times)*0.02,
@@ -557,7 +560,6 @@ class EvaluationRunner:
         """Plot performance summary and recommendations."""
         methods_evaluated = len([k for k in self.results.keys() if 'accuracy' in self.results.get(k, {})])
         
-        # Find best method
         best_method = 'baseline'
         best_accuracy = 0
         baseline_accuracy = self.results.get('baseline', {}).get('accuracy', 0)
@@ -570,15 +572,15 @@ class EvaluationRunner:
         
         best_improvement = best_accuracy - baseline_accuracy
         
-        # Create summary text
-        summary_text = f"🔍 COMPREHENSIVE EVALUATION SUMMARY\n\n"
-        summary_text += f"State Space: 143D (Fixed)\n"
-        summary_text += f"Methods Evaluated: {methods_evaluated}\n"
-        summary_text += f"Best Method: {best_method.replace('_', ' ').title()}\n"
+        summary_text = f""" COMPREHENSIVE EVALUATION SUMMARY
+
+State Space: 143D (Fixed)
+Methods Evaluated: {methods_evaluated}
+Best Method: {best_method.replace('_', ' ').title()}
+"""
         if best_improvement != 0:
             summary_text += f"Improvement: {best_improvement:+.4f}\n"
         
-        # Performance overview
         summary_text += f"\nPerformance Overview:\n"
         
         for i, (method_key, result) in enumerate(self.results.items(), 1):
@@ -620,7 +622,6 @@ class EvaluationRunner:
         except ImportError:
             return
         
-        # Find methods with predictions
         methods_with_predictions = []
         for method_name, method_results in self.results.items():
             if isinstance(method_results, dict) and 'predictions' in method_results and 'labels' in method_results:
@@ -629,11 +630,9 @@ class EvaluationRunner:
         if not methods_with_predictions:
             return
         
-        # Class names
         class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer',
                        'dog', 'frog', 'horse', 'ship', 'truck']
         
-        # Determine subplot layout
         n_methods = len(methods_with_predictions)
         if n_methods == 1:
             fig, axes = plt.subplots(1, 1, figsize=(8, 6))
@@ -656,11 +655,9 @@ class EvaluationRunner:
             predictions = method_results['predictions']
             labels = method_results['labels']
             
-            # Calculate confusion matrix
             cm = confusion_matrix(labels, predictions)
             overall_accuracy = cm.diagonal().sum() / cm.sum()
             
-            # Create heatmap
             sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
                        xticklabels=class_names, yticklabels=class_names,
                        ax=ax, cbar_kws={'shrink': 0.8})
@@ -672,14 +669,12 @@ class EvaluationRunner:
             ax.tick_params(axis='x', rotation=45)
             ax.tick_params(axis='y', rotation=0)
         
-        # Hide unused subplots
         for j in range(i + 1, len(axes)):
             axes[j].set_visible(False)
         
         plt.tight_layout()
         
-        # Save confusion matrices
-        cm_path = f"{self.config.output_dir}/plots/confusion_matrices.png"
+        cm_path = f"{self.config['output_dir']}/plots/confusion_matrices.png"
         plt.savefig(cm_path, dpi=300, bbox_inches='tight')
         plt.close()
         
@@ -699,21 +694,17 @@ class EvaluationRunner:
         class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer',
                        'dog', 'frog', 'horse', 'ship', 'truck']
         
-        # Simulate class-wise improvements (in real implementation, track during evaluation)
         total_improvements = self.results['rl'].get('improvements', 0)
         total_degradations = self.results['rl'].get('degradations', 0)
         
-        # Create realistic distribution
-        np.random.seed(42)  # For reproducible results
+        np.random.seed(42)
         improvements_by_class = np.random.multinomial(total_improvements, [0.1]*10) if total_improvements > 0 else [0]*10
         degradations_by_class = np.random.multinomial(total_degradations, [0.1]*10) if total_degradations > 0 else [0]*10
         
-        # Create plots
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
         fig.suptitle('RL Agent: Class-wise Performance Changes - 143D State Space', 
                      fontsize=16, fontweight='bold')
         
-        # Plot 1: Improvements vs Degradations
         x = np.arange(len(class_names))
         width = 0.35
         
@@ -730,7 +721,6 @@ class EvaluationRunner:
         ax1.legend()
         ax1.grid(axis='y', alpha=0.3)
         
-        # Plot 2: Net improvement per class
         net_improvements = np.array(improvements_by_class) - np.array(degradations_by_class)
         colors = ['green' if x > 0 else 'red' if x < 0 else 'gray' for x in net_improvements]
         
@@ -745,183 +735,33 @@ class EvaluationRunner:
         
         plt.tight_layout()
         
-        # Save plot
-        class_analysis_path = f"{self.config.output_dir}/plots/rl_class_analysis.png"
+        class_analysis_path = f"{self.config['output_dir']}/plots/rl_class_analysis.png"
         plt.savefig(class_analysis_path, dpi=300, bbox_inches='tight')
         plt.close()
         
         print(f"   RL class analysis: {class_analysis_path}")
 
 
-class InteractiveConfigManager:
-    """Handles interactive configuration for evaluation."""
-    
-    @staticmethod
-    def get_interactive_config() -> EvaluationConfig:
-        """Get configuration through interactive prompts."""
-        print("\n INTERACTIVE CONFIGURATION")
-        print("-" * 40)
-        print("Configure your evaluation settings:")
-        
-        config = ConfigManager.create_default_config()
-        
-        try:
-            # Ask for evaluation samples
-            print("\nSample Configuration:")
-            baseline_samples = InteractiveConfigManager._get_int_input(
-                f"Baseline samples (default {config.baseline_samples}): ",
-                config.baseline_samples, 100, 50000
-            )
-            if baseline_samples is not None:
-                config.baseline_samples = baseline_samples
-            
-            fixed_aug_samples = InteractiveConfigManager._get_int_input(
-                f"Fixed augmentation samples (default {config.fixed_aug_samples}): ",
-                config.fixed_aug_samples, 100, 50000
-            )
-            if fixed_aug_samples is not None:
-                config.fixed_aug_samples = fixed_aug_samples
-            
-            tta_samples = InteractiveConfigManager._get_int_input(
-                f"TTA samples (default {config.tta_samples}): ",
-                config.tta_samples, 100, 5000
-            )
-            if tta_samples is not None:
-                config.tta_samples = tta_samples
-            
-            rl_episodes = InteractiveConfigManager._get_int_input(
-                f"RL episodes (default {config.rl_episodes}): ",
-                config.rl_episodes, 100, 10000
-            )
-            if rl_episodes is not None:
-                config.rl_episodes = rl_episodes
-            
-            # Ask about methods to evaluate
-            print("\nMethods to evaluate:")
-            config.evaluate_baseline = InteractiveConfigManager._get_bool_input(
-                "Evaluate Baseline? (Y/n): ", config.evaluate_baseline
-            )
-            config.evaluate_fixed_aug = InteractiveConfigManager._get_bool_input(
-                "Evaluate Fixed Augmentation? (Y/n): ", config.evaluate_fixed_aug
-            )
-            config.evaluate_tta = InteractiveConfigManager._get_bool_input(
-                "Evaluate Test-Time Augmentation? (Y/n): ", config.evaluate_tta
-            )
-            config.evaluate_rl = InteractiveConfigManager._get_bool_input(
-                "Evaluate RL Agent? (Y/n): ", config.evaluate_rl
-            )
-            
-            # Ask about output options
-            print("\nOutput Configuration:")
-            config.create_plots = InteractiveConfigManager._get_bool_input(
-                "Create comprehensive plots? (Y/n): ", config.create_plots
-            )
-            config.save_results = InteractiveConfigManager._get_bool_input(
-                "Save detailed results? (Y/n): ", config.save_results
-            )
-            
-            return config
-            
-        except (EOFError, KeyboardInterrupt):
-            print("\nConfiguration cancelled, using defaults")
-            return ConfigManager.create_default_config()
-    
-    @staticmethod
-    def _get_int_input(prompt: str, default: int, min_val: int = None, max_val: int = None) -> int:
-        """Get integer input with validation."""
-        while True:
-            try:
-                response = input(prompt).strip()
-                if not response:
-                    return default
-                
-                value = int(response)
-                
-                if min_val is not None and value < min_val:
-                    print(f"Value must be at least {min_val}")
-                    continue
-                
-                if max_val is not None and value > max_val:
-                    print(f"Value must be at most {max_val}")
-                    continue
-                
-                return value
-                
-            except ValueError:
-                print("Please enter a valid number")
-            except (EOFError, KeyboardInterrupt):
-                return default
-    
-    @staticmethod
-    def _get_bool_input(prompt: str, default: bool = True) -> bool:
-        """Get boolean input with Y/n prompt."""
-        try:
-            response = input(prompt).lower().strip()
-            
-            if not response:
-                return default
-            
-            if response in ['y', 'yes', 'true', '1']:
-                return True
-            elif response in ['n', 'no', 'false', '0']:
-                return False
-            else:
-                print("Please enter Y or N")
-                return InteractiveConfigManager._get_bool_input(prompt, default)
-                
-        except (EOFError, KeyboardInterrupt):
-            return default
-    
-    @staticmethod
-    def confirm_configuration(config: EvaluationConfig) -> bool:
-        """Show configuration and get confirmation."""
-        ConfigManager.print_config_summary(config)
-        
-        # Estimate time
-        total_samples = config.baseline_samples + config.fixed_aug_samples + config.tta_samples + config.rl_episodes
-        if total_samples > 10000:
-            print(f"\n This evaluation will process ~{total_samples:,} samples")
-            print("   Estimated time: 15-45 minutes depending on your hardware")
-        elif total_samples > 5000:
-            print(f"\n This evaluation will process ~{total_samples:,} samples")
-            print("   Estimated time: 8-20 minutes")
-        else:
-            print(f"\n Quick evaluation: ~{total_samples:,} samples")
-            print("   Estimated time: 3-8 minutes")
-        
-        return InteractiveConfigManager._get_bool_input("\nContinue with this configuration? (Y/n): ", True)
-
-
 def parse_arguments():
-    """Parse command line arguments with enhanced options."""
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Model Evaluation for 143D State Space",
+        description="Model Evaluation with Centralized Configuration",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python full_evaluation.py                           # Interactive mode
-  python full_evaluation.py --quick                  # Quick evaluation
-  python full_evaluation.py --interactive            # Force interactive config
-  python full_evaluation.py --baseline-samples 5000  # Custom baseline samples
-  python full_evaluation.py --tta-samples 2000       # Custom TTA samples
-  python full_evaluation.py --skip-rl                # Skip RL evaluation
+  python full_evaluation.py                    # Default configuration
+  python full_evaluation.py --quick            # Quick evaluation  
+  python full_evaluation.py --interactive      # Interactive mode
+  python full_evaluation.py --output-dir ./my_results
         """
     )
     
     parser.add_argument('--quick', action='store_true',
                        help='Run quick evaluation with reduced samples')
     parser.add_argument('--interactive', action='store_true',
-                       help='Force interactive configuration')
-    parser.add_argument('--baseline-samples', type=int, metavar='N',
-                       help='Number of samples for baseline evaluation')
-    parser.add_argument('--fixed-aug-samples', type=int, metavar='N',
-                       help='Number of samples for fixed augmentation evaluation')
-    parser.add_argument('--tta-samples', type=int, metavar='N',
-                       help='Number of samples for TTA evaluation')
-    parser.add_argument('--rl-episodes', type=int, metavar='N',
-                       help='Number of episodes for RL evaluation')
+                       help='Interactive configuration mode')
     parser.add_argument('--output-dir', type=str, metavar='PATH',
-                       help='Output directory for results')
+                       help='Custom output directory')
     parser.add_argument('--skip-baseline', action='store_true',
                        help='Skip baseline evaluation')
     parser.add_argument('--skip-fixed-aug', action='store_true',
@@ -938,62 +778,81 @@ Examples:
     return parser.parse_args()
 
 
+def get_interactive_config():
+    """Get configuration through interactive prompts."""
+    print("\n INTERACTIVE CONFIGURATION")
+    print("-" * 40)
+    
+    config = get_default_config()
+    
+    try:
+        # Sample sizes
+        print("\nSample Configuration:")
+        baseline = input(f"Baseline samples (default {config['baseline_samples']}): ").strip()
+        if baseline: config['baseline_samples'] = int(baseline)
+        
+        tta = input(f"TTA samples (default {config['tta_samples']}): ").strip()
+        if tta: config['tta_samples'] = int(tta)
+        
+        rl = input(f"RL episodes (default {config['rl_episodes']}): ").strip() 
+        if rl: config['rl_episodes'] = int(rl)
+        
+        # Methods
+        print("\nMethods to evaluate:")
+        config['evaluate_baseline'] = input("Baseline? (Y/n): ").lower() not in ['n', 'no']
+        config['evaluate_fixed_aug'] = input("Fixed Augmentation? (Y/n): ").lower() not in ['n', 'no'] 
+        config['evaluate_tta'] = input("TTA? (Y/n): ").lower() not in ['n', 'no']
+        config['evaluate_rl'] = input("RL Agent? (Y/n): ").lower() not in ['n', 'no']
+        
+        # Output
+        config['create_plots'] = input("Create plots? (Y/n): ").lower() not in ['n', 'no']
+        config['save_results'] = input("Save results? (Y/n): ").lower() not in ['n', 'no']
+        
+        return config
+        
+    except (EOFError, KeyboardInterrupt, ValueError):
+        print("\n Using default configuration")
+        return get_default_config()
+
+
 def main():
-    """Main entry point with enhanced configuration options."""
+    """Main entry point."""
     args = parse_arguments()
     
-    # Determine configuration method
-    if args.interactive or (not any([
-        args.quick, args.baseline_samples, args.fixed_aug_samples, args.tta_samples,
-        args.rl_episodes, args.skip_baseline, args.skip_fixed_aug,
-        args.skip_tta, args.skip_rl
-    ])):
-        # Interactive mode
-        print(" INTERACTIVE CONFIGURATION MODE")
-        config = InteractiveConfigManager.get_interactive_config()
+    # Determine configuration
+    if args.interactive:
+        print(" INTERACTIVE MODE")
+        config = get_interactive_config()
+        print_config(config)
         
-        if not InteractiveConfigManager.confirm_configuration(config):
-            print("Evaluation cancelled by user")
+        confirm = input("\nContinue with this configuration? (Y/n): ").lower()
+        if confirm in ['n', 'no']:
+            print(" Evaluation cancelled")
             sys.exit(0)
     else:
-        # Command line configuration
+        # Use default or quick config
         if args.quick:
-            config = ConfigManager.create_quick_config()
-            print("Using quick evaluation configuration")
+            config = get_quick_config()
+            print(" Using quick evaluation configuration")
         else:
-            config = ConfigManager.create_default_config()
-            print("Using default evaluation configuration")
+            config = get_default_config()
+            print(" Using default evaluation configuration")
         
-        # Apply command line arguments
-        if args.baseline_samples:
-            config.baseline_samples = args.baseline_samples
-        if args.fixed_aug_samples:
-            config.fixed_aug_samples = args.fixed_aug_samples
-        if args.tta_samples:
-            config.tta_samples = args.tta_samples
-        if args.rl_episodes:
-            config.rl_episodes = args.rl_episodes
+        # Apply command line overrides
         if args.output_dir:
-            config.output_dir = args.output_dir
-        
-        # Apply method toggles
+            config['output_dir'] = args.output_dir
         if args.skip_baseline:
-            config.evaluate_baseline = False
+            config['evaluate_baseline'] = False
         if args.skip_fixed_aug:
-            config.evaluate_fixed_aug = False
+            config['evaluate_fixed_aug'] = False
         if args.skip_tta:
-            config.evaluate_tta = False
+            config['evaluate_tta'] = False
         if args.skip_rl:
-            config.evaluate_rl = False
-        
-        # Apply output options
+            config['evaluate_rl'] = False
         if args.no_plots:
-            config.create_plots = False
+            config['create_plots'] = False
         if args.no_save:
-            config.save_results = False
-        
-        # Print configuration for command line mode
-        ConfigManager.print_config_summary(config)
+            config['save_results'] = False
     
     # Run evaluation
     runner = EvaluationRunner(config)
@@ -1001,9 +860,9 @@ def main():
     
     if results:
         print("\n Evaluation completed successfully!")
-        print(f" Results saved to: {config.output_dir}")
-        if config.create_plots:
-            print(f" Plots available in: {config.output_dir}/plots/")
+        print(f" Results saved to: {config['output_dir']}")
+        if config['create_plots']:
+            print(f" Plots available in: {config['output_dir']}/plots/")
         sys.exit(0)
     else:
         print("\n Evaluation failed")
