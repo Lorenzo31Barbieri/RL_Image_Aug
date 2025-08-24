@@ -6,7 +6,7 @@ from src.models.agent import DQNAgent
 
 # --- CONFIGURATION ---
 DEFAULT_CLASSIFIER_PATH = './checkpoint/ckpt.pth'
-DEFAULT_RL_MODEL_PATH = './models/enhanced_dqn_episode_72000.pth'
+DEFAULT_RL_MODEL_PATH = './models/best_dqn_model.pth'
 STATE_DIM = 143  # Fixed state dimension
 ACTION_DIM = 16  # Fixed action dimension
 

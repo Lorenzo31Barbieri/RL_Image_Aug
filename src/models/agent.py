@@ -10,7 +10,7 @@ from collections import deque
 class QNetwork(nn.Module):
     """Q-Network for 143-dimensional state space."""
 
-    def __init__(self, state_dim=143, action_dim=16, hidden_dim=512):
+    def __init__(self, state_dim=143, action_dim=16, hidden_dim=256):
         super(QNetwork, self).__init__()
         
         self.fc1 = nn.Linear(state_dim, hidden_dim)
@@ -19,7 +19,7 @@ class QNetwork(nn.Module):
         self.fc4 = nn.Linear(hidden_dim // 2, hidden_dim // 4)
         self.fc5 = nn.Linear(hidden_dim // 4, action_dim)
         
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(0.1)
         self.layer_norm1 = nn.LayerNorm(hidden_dim)
         self.layer_norm2 = nn.LayerNorm(hidden_dim)
         self.layer_norm3 = nn.LayerNorm(hidden_dim // 2)
@@ -77,7 +77,9 @@ class DQNAgent:
         self.optimizer = optim.Adam(self.q_network.parameters(), lr=lr, weight_decay=1e-5)
         
         # Learning rate scheduler
-        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=3000, gamma=0.9)
+        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            self.optimizer, T_max=75000//4, eta_min=1e-5
+        )
         
         # Experience replay
         if prioritized_replay:
@@ -211,27 +213,20 @@ class DQNAgent:
 class PrioritizedReplayBuffer:
     """Prioritized Experience Replay Buffer."""
     
-    def __init__(self, capacity, alpha=0.6, beta_start=0.4, beta_frames=100000):
+    def __init__(self, capacity=50000, alpha=0.6):
         self.capacity = capacity
         self.alpha = alpha
-        self.beta_start = beta_start
-        self.beta_frames = beta_frames
-        self.frame = 1
-        
         self.buffer = []
-        self.pos = 0
         self.priorities = np.zeros((capacity,), dtype=np.float32)
-    
-    def add(self, state, action, reward, next_state, done, td_error):
-        max_priority = self.priorities.max() if self.buffer else 1.0
         
+    def add(self, experience, td_error=1.0):
         if len(self.buffer) < self.capacity:
-            self.buffer.append((state, action, reward, next_state, done))
+            self.buffer.append(experience)
         else:
-            self.buffer[self.pos] = (state, action, reward, next_state, done)
-        
-        self.priorities[self.pos] = max_priority
-        self.pos = (self.pos + 1) % self.capacity
+            # Sostituisci l'esperienza con priorità più bassa
+            min_idx = np.argmin(self.priorities[:len(self.buffer)])
+            self.buffer[min_idx] = experience
+            self.priorities[min_idx] = td_error
     
     def sample(self, batch_size):
         if len(self.buffer) == self.capacity:

@@ -18,7 +18,7 @@ class EvaluationConfig:
     
     # Model paths
     classifier_path: str = './checkpoint/ckpt.pth'
-    rl_model_path: str = './models/enhanced_dqn_episode_72000.pth'
+    rl_model_path: str = './models/best_dqn_model.pth'
     data_root: str = './data'
     
     # Fixed dimensions for 143D state space
@@ -216,7 +216,7 @@ def create_evaluation_config() -> Dict[str, Any]:
     return {
         # Model paths
         'classifier_path': './checkpoint/ckpt.pth',
-        'rl_model_path': './models/enhanced_dqn_episode_72000.pth',
+        'rl_model_path': './models/best_dqn_model.pth',
         'data_root': './data',
         
         # Fixed dimensions
@@ -344,7 +344,7 @@ def get_default_paths() -> Dict[str, str]:
     """Get default paths for the project."""
     return {
         'classifier_path': './checkpoint/ckpt.pth',
-        'rl_model_path': './models/enhanced_dqn_episode_72000.pth',
+        'rl_model_path': './models/best_dqn_model.pth',
         'data_root': './data',
         'models_dir': './models',
         'plots_dir': './plots',

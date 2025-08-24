@@ -13,7 +13,7 @@ def create_default_config():
         # Percorsi dei modelli
         'classifier_path': './checkpoint/ckpt.pth',
         # 'rl_model_path': './models/best_improved_dqn_model.pth',
-        'rl_model_path': './models/enhanced_dqn_episode_72000.pth',
+        'rl_model_path': './models/best_dqn_model.pth',
         'data_root': './data',
         
         # Parametri di valutazione

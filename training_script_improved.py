@@ -36,23 +36,23 @@ print(f"State dimension: {STATE_DIM} (logits: {LOGITS_DIM}, additional: {ADDITIO
 print(f"Action dimension: {ACTION_DIM}")
 
 # Training hyperparameters
-learning_rate = 0.0003
-gamma = 0.95
+learning_rate = 0.0005
+gamma = 0.99
 epsilon_start = 1.0
-epsilon_end = 0.005
+epsilon_end = 0.01
 epsilon_decay = 0.99975
-buffer_size = 300000
-batch_size = 128
-target_update_freq = 1000
-num_total_episodes = 75000
+buffer_size = 50000
+batch_size = 64
+target_update_freq = 2000
+num_total_episodes = 50000
 max_steps_per_episode = 3
-images_per_cycle = 3
+images_per_cycle = 4
 
 # Training strategy parameters
-warmup_episodes = 3000
-eval_freq = 2500
+warmup_episodes = 2000
+eval_freq = 2000
 eval_episodes = 200
-patience = 300
+patience = 100
 best_eval_reward = float('-inf')
 patience_counter = 0
 
@@ -346,8 +346,8 @@ def train_rl_agent():
 
             # Learning step
             if len(agent.replay_buffer) > batch_size and episode > warmup_episodes:
-                if episode % 2 == 0:
-                    for _ in range(4):  # Multiple learning steps
+                if episode % 4 == 0:
+                    for _ in range(2):  # Multiple learning steps
                         loss_item = agent.learn()
                         if loss_item is not None:
                             loss_history.append(loss_item)

@@ -281,35 +281,21 @@ class ImageAugmentationEnv:
         """Calculate reward based on correctness and confidence improvements."""
         reward = 0.0
         
-        # Primary reward: correctness improvement
+        # Reward più bilanciato
         if not prev_correct and curr_correct:
-            reward += 10.0  # Major positive reward for fixing incorrect prediction
+            reward += 5.0
         elif prev_correct and not curr_correct:
-            reward -= 10.0  # Major penalty for breaking correct prediction
+            reward -= 8.0
         elif prev_correct and curr_correct:
-            # Both correct: reward confidence improvement
+            # Bonus per confidence improvement
             conf_improvement = curr_conf - prev_conf
-            reward += conf_improvement * 5.0
+            reward += conf_improvement * 3.0
         else:
-            # Both incorrect: small reward for confidence improvement toward correct class
+            # Reward anche quando sbagliato ma migliora confidence
             conf_improvement = curr_conf - prev_conf
-            reward += conf_improvement * 2.0
+            reward += conf_improvement * 1.5
         
-        # Secondary reward: general confidence improvement (when correct)
-        if curr_correct:
-            conf_bonus = max(0, curr_conf - 0.9) * 2.0  # Bonus for high confidence
-            reward += conf_bonus
-        
-        # Action-specific penalties to discourage overuse of aggressive transforms
-        action_penalties = {
-            6: -0.1,  # Rotation penalties
-            7: -0.1,
-            12: -0.2,  # Horizontal flip penalty (can be harmful for CIFAR-10)
-        }
-        reward += action_penalties.get(action, 0)
-        
-        # Small penalty for taking steps (encourage efficiency)
-        reward -= 0.1
+        reward -= 0.05
         
         return reward
 
