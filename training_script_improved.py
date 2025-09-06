@@ -339,11 +339,11 @@ def train_rl_agent():
         # Epsilon decay (adaptive)
         if episode > WARMUP_EPISODES:
             if episode < 15000:
-                current_epsilon_decay = 0.999925
+                current_epsilon_decay = 0.9998
             elif episode < 45000:
-                current_epsilon_decay = 0.9995
+                current_epsilon_decay = 0.9997
             else:
-                current_epsilon_decay = 0.9990
+                current_epsilon_decay = 0.9995
             
             agent.epsilon = max(agent.epsilon_end, agent.epsilon * current_epsilon_decay)
 

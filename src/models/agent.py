@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import random
 import numpy as np
 from collections import deque
+from config.training_config import NUM_TOTAL_EPISODES
 
 
 class QNetwork(nn.Module):
@@ -78,7 +79,7 @@ class DQNAgent:
         
         # Learning rate scheduler
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, T_max=75000//4, eta_min=1e-5
+            self.optimizer, T_max=NUM_TOTAL_EPISODES//4, eta_min=1e-5
         )
         
         # Experience replay
@@ -92,7 +93,7 @@ class DQNAgent:
         self.total_actions = 0
 
     def select_action(self, state, training=True):
-        """Select action using epsilon-greedy policy."""
+        """Select action"""
         if training and random.random() < self.epsilon:
             # Epsilon-greedy with action frequency consideration
             if self.total_actions > 1000:

@@ -278,20 +278,20 @@ class ImageAugmentationEnv:
         return next_state, reward, done, info
 
     def _calculate_reward(self, prev_correct, curr_correct, prev_conf, curr_conf, action):
-        """Calculate reward based on correctness and confidence improvements."""
+        """Calculate reward"""
         reward = 0.0
         
-        # Reward più bilanciato
+        # Main correctness rewards
         if not prev_correct and curr_correct:
             reward += 5.0
         elif prev_correct and not curr_correct:
             reward -= 8.0
         elif prev_correct and curr_correct:
-            # Bonus per confidence improvement
+            # Bonus per confidence improvement quando gia corretto
             conf_improvement = curr_conf - prev_conf
             reward += conf_improvement * 3.0
         else:
-            # Reward anche quando sbagliato ma migliora confidence
+            # Reward quando sbagliato ma migliora confidence
             conf_improvement = curr_conf - prev_conf
             reward += conf_improvement * 1.5
         

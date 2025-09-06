@@ -611,7 +611,7 @@ Best Method: {best_method.replace('_', ' ').title()}
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
         ax.axis('off')
-        ax.set_title('Summary & Recommendations', fontweight='bold', fontsize=12)
+        ax.set_title('Summary', fontweight='bold', fontsize=12)
     
     def _create_confusion_matrices(self):
         """Create confusion matrix plots."""

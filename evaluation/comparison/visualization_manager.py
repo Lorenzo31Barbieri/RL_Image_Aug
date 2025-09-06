@@ -329,7 +329,7 @@ class VisualizationManager:
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
         ax.axis('off')
-        ax.set_title('Summary & Recommendations', fontweight='bold', fontsize=12)
+        ax.set_title('Summary', fontweight='bold', fontsize=12)
     
     def _create_confusion_matrix_analysis(self, results: Dict[str, Any]) -> None:
         """Create confusion matrix analysis for all methods."""
